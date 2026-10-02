@@ -10,7 +10,7 @@ import { Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 export default function InboxPage() {
-    const { userId, isLoading } = useInstagramSession()
+    const { userId, username, isLoading } = useInstagramSession()
     const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null)
     const [selectedRecipientName, setSelectedRecipientName] = useState<string | null>(null)
     const [selectedRecipientId, setSelectedRecipientId] = useState<string | null>(null)
@@ -54,6 +54,7 @@ export default function InboxPage() {
                     <Button size="sm" variant="outline" onClick={realtime.toggleSound} aria-pressed={realtime.soundEnabled}>{realtime.soundEnabled ? (realtime.soundReady ? "알림음 끄기" : "알림음 켜짐 · 눌러서 활성화") : "알림음 켜기"}</Button>
                 </div>
                 <ConversationList
+                    accountUsername={username}
                     userId={userId}
                     revision={realtime.listRevision + localRevision}
                     selectedId={selectedConversationId}
@@ -74,6 +75,7 @@ export default function InboxPage() {
                     recipientDisplayName={selectedDisplayName}
                     recipientProfilePic={selectedProfilePic}
                     recipientId={selectedRecipientId || undefined}
+                    accountUsername={username}
                     userId={userId}
                     onBack={() => setSelectedConversationId(null)}
                 />

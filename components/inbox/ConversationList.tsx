@@ -3,17 +3,19 @@
 import { useEffect, useState } from "react"
 import { Search, Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { InstagramDMLink } from "./InstagramDMLink"
 import { RecipientAvatar } from "./RecipientAvatar"
 import type { Conversation } from "@/types/db"
 
 interface ConversationListProps {
+    accountUsername?: string | null
     revision?: number
     userId: string
     selectedId: string | null
     onSelect: (id: string, username: string, recipientId: string, displayName?: string | null, profilePic?: string | null) => void
 }
 
-export function ConversationList({ userId, selectedId, onSelect, revision = 0 }: ConversationListProps) {
+export function ConversationList({ accountUsername, userId, selectedId, onSelect, revision = 0 }: ConversationListProps) {
     const [conversations, setConversations] = useState<Conversation[]>([])
     const [loading, setLoading] = useState(true)
 
@@ -85,7 +87,7 @@ export function ConversationList({ userId, selectedId, onSelect, revision = 0 }:
                                         selectedId === conv.id ? "text-accent-yellow-foreground dark:text-accent-yellow" : "text-foreground"
                                     )}>
                                         {/^[A-Za-z0-9._]+$/.test(conv.recipient_username) ? (
-                                            <a href={`https://ig.me/m/${encodeURIComponent(conv.recipient_username)}`} target="_blank" rel="noopener noreferrer" onClick={event => event.stopPropagation()} className="hover:underline" aria-label={`@${conv.recipient_username} 인스타 DM 열기`} title="대화를 나눈 인스타 계정으로 전환한 후 열어주세요">@{conv.recipient_username}</a>
+                                            <InstagramDMLink username={conv.recipient_username} accountUsername={accountUsername} className="hover:underline">@{conv.recipient_username}</InstagramDMLink>
                                         ) : <>@{conv.recipient_username}</>}
                                     </span>
                                     <span className="text-[10px] text-muted-foreground whitespace-nowrap">

@@ -4,10 +4,12 @@ import { useEffect, useState, useRef } from "react"
 import { Send, Loader2, MoreVertical, Phone, Video, Zap, ChevronLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import { InstagramDMLink } from "./InstagramDMLink"
 import { RecipientAvatar } from "./RecipientAvatar"
 import type { Message } from "@/types/db"
 
 interface ChatWindowProps {
+    accountUsername?: string | null
     onStatusChanged?: () => void
     revision?: number
     conversationId: string | null
@@ -19,7 +21,7 @@ interface ChatWindowProps {
     onBack?: () => void
 }
 
-export function ChatWindow({ conversationId, recipientId, recipientName, recipientDisplayName, recipientProfilePic, userId, onBack, revision = 0, onStatusChanged }: ChatWindowProps) {
+export function ChatWindow({ accountUsername, conversationId, recipientId, recipientName, recipientDisplayName, recipientProfilePic, userId, onBack, revision = 0, onStatusChanged }: ChatWindowProps) {
     const [messages, setMessages] = useState<Message[]>([])
     const [loading, setLoading] = useState(false)
     const [inputText, setInputText] = useState("")
@@ -149,7 +151,7 @@ export function ChatWindow({ conversationId, recipientId, recipientName, recipie
                     <div className="min-w-0">
                         <h3 className="font-bold text-foreground text-sm truncate">
                             {recipientName && /^[A-Za-z0-9._]+$/.test(recipientName) ? (
-                                <a href={`https://ig.me/m/${encodeURIComponent(recipientName)}`} target="_blank" rel="noopener noreferrer" className="hover:underline" aria-label={`@${recipientName} 인스타 DM 열기`} title="대화를 나눈 인스타 계정으로 전환한 후 열어주세요">@{recipientName}</a>
+                                <InstagramDMLink username={recipientName} accountUsername={accountUsername} className="hover:underline">@{recipientName}</InstagramDMLink>
                             ) : <>@{recipientName}</>}
                         </h3>
                         {recipientDisplayName && <p className="text-xs text-muted-foreground truncate">{recipientDisplayName}</p>}
