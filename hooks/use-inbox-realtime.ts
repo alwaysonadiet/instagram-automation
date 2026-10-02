@@ -7,6 +7,7 @@ export function useInboxRealtime(userId: string | null, conversationId: string |
   const [chatRevision, setChatRevision] = useState(0)
   const [connected, setConnected] = useState(false)
   const [soundEnabled, setSoundEnabled] = useState(false)
+  const [soundReady, setSoundReady] = useState(false)
   const selected = useRef(conversationId)
   selected.current = conversationId
   const audio = useRef<AudioContext | null>(null)
@@ -30,20 +31,45 @@ export function useInboxRealtime(userId: string | null, conversationId: string |
     oscillator.onended = () => { oscillator.disconnect(); gain.disconnect() }
   }, [])
 
+  const activateAudio = useCallback(async () => {
+    try {
+      if (!audio.current || audio.current.state === "closed") audio.current = new AudioContext()
+      await audio.current.resume()
+      setSoundReady(audio.current.state === "running")
+    } catch { setSoundReady(false) }
+  }, [])
+
+  useEffect(() => {
+    const key = `inbox-sound-${userId}`
+    try {
+      sound.current = !!userId && localStorage.getItem(key) === "on"
+    } catch { sound.current = false }
+    setSoundEnabled(sound.current)
+    if (sound.current) void activateAudio()
+    const resume = () => { if (sound.current) void activateAudio() }
+    document.addEventListener("pointerdown", resume)
+    document.addEventListener("keydown", resume)
+    return () => {
+      document.removeEventListener("pointerdown", resume)
+      document.removeEventListener("keydown", resume)
+    }
+  }, [userId, activateAudio])
+
   const toggleSound = useCallback(async () => {
-    if (sound.current) {
-      sound.current = false
-      setSoundEnabled(false)
+    // A remembered preference may still need a gesture after reloading Safari.
+    if (sound.current && !soundReady) {
+      await activateAudio()
+      playSound()
       return
     }
-    try {
-      if (!audio.current) audio.current = new AudioContext()
-      await audio.current.resume()
-      sound.current = audio.current.state === "running"
-      setSoundEnabled(sound.current)
+    sound.current = !sound.current
+    setSoundEnabled(sound.current)
+    try { localStorage.setItem(`inbox-sound-${userId}`, sound.current ? "on" : "off") } catch {}
+    if (sound.current) {
+      await activateAudio()
       playSound()
-    } catch { setSoundEnabled(false) }
-  }, [playSound])
+    }
+  }, [userId, soundReady, activateAudio, playSound])
 
   useEffect(() => {
     if (!userId) return
@@ -88,6 +114,6 @@ export function useInboxRealtime(userId: string | null, conversationId: string |
     }
   }, [userId, playSound])
 
-  useEffect(() => () => { void audio.current?.close() }, [])
-  return { listRevision, chatRevision, connected, soundEnabled, toggleSound }
+  useEffect(() => () => { void audio.current?.close(); audio.current = null }, [])
+  return { listRevision, chatRevision, connected, soundEnabled, soundReady, toggleSound }
 }

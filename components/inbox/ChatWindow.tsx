@@ -162,6 +162,21 @@ export function ChatWindow({ conversationId, recipientId, recipientName, userId,
                                         : "bg-muted text-foreground rounded-bl-none border border-border"
                                 )}>
                                     {msg.content}
+                                    {msg.attachments?.map((attachment, index) => attachment.url && /^https:\/\//i.test(attachment.url) ? (
+                                        <div key={index} className="mt-2">
+                                            {attachment.type === "image" ? (
+                                                <a href={attachment.url} target="_blank" rel="noopener noreferrer">
+                                                    <img src={attachment.url} alt="받은 사진" loading="lazy" referrerPolicy="no-referrer" className="max-h-80 rounded-lg object-contain" />
+                                                </a>
+                                            ) : attachment.type === "video" ? (
+                                                <video src={attachment.url} controls preload="none" className="max-h-80 rounded-lg" />
+                                            ) : attachment.type === "audio" ? (
+                                                <audio src={attachment.url} controls preload="none" />
+                                            ) : (
+                                                <a href={attachment.url} target="_blank" rel="noopener noreferrer" className="underline">첨부파일 열기</a>
+                                            )}
+                                        </div>
+                                    ) : null)}
                                     <div className={cn(
                                         "text-[10px] mt-1 opacity-70",
                                         isMe ? "text-primary-foreground/70 text-right" : "text-muted-foreground"

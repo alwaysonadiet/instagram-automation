@@ -100,6 +100,9 @@ async function checkRealtime() {
   const originalTimeout = global.setTimeout
   const originalClear = global.clearTimeout
   const originalDocument = global.document
+  const originalStorage = global.localStorage
+  const preferences = new Map()
+  global.localStorage = { getItem: key => preferences.get(key) || null, setItem: (key, value) => preferences.set(key, value) }
   const originalAudio = global.AudioContext
   global.setTimeout = fn => { queued.push(fn); return queued.length }
   global.clearTimeout = () => {}
@@ -129,6 +132,7 @@ async function checkRealtime() {
     assert.equal(queued.length, 0, 'idle inbox must not poll')
     await hook.toggleSound()
     assert.equal(sounds, 1, 'sound enabling plays a confirmation')
+    assert.equal(preferences.get('inbox-sound-28163924569973068'), 'on', 'sound preference survives reload')
     status('SUBSCRIBED'); queued.splice(0).forEach(fn => fn())
     assert.equal(state[0], 1); assert.equal(state[1], 1)
     event({ new: { id: 'incoming', conversation_id: 'selected', is_from_instagram: true } })
@@ -146,9 +150,17 @@ async function checkRealtime() {
     cleanups.forEach(fn => fn?.())
     assert.equal(removed, 1)
     assert.equal(queued.length, 0)
+    effects.length = 0; state.length = 0; cleanups.length = 0
+    const restored = useInboxRealtime('28163924569973068', 'selected')
+    effects.forEach(fn => cleanups.push(fn()))
+    await Promise.resolve()
+    assert.equal(state[3], true, 'remount restores enabled preference')
+    event({ new: { id: 'after-reload', conversation_id: 'selected', is_from_instagram: true } })
+    assert.equal(sounds, 3, 'restored sound rings when browser permits audio')
+    cleanups.forEach(fn => fn?.())
   } finally {
     global.setTimeout = originalTimeout; global.clearTimeout = originalClear
-    global.document = originalDocument; global.AudioContext = originalAudio
+    global.document = originalDocument; global.AudioContext = originalAudio; global.localStorage = originalStorage
   }
 }
 

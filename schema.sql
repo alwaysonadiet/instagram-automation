@@ -456,3 +456,6 @@ BEGIN
     ALTER PUBLICATION supabase_realtime ADD TABLE public.messages;
   END IF;
 END $$;
+
+-- Incoming Instagram media attachments; existing inbox RLS also protects this column.
+ALTER TABLE public.messages ADD COLUMN IF NOT EXISTS attachments JSONB NOT NULL DEFAULT '[]'::jsonb;

@@ -525,9 +525,20 @@ export async function POST(request: NextRequest) {
           } else if (event.postback?.payload) {
             triggerType = "postback"
             triggerValue = event.postback.payload
+          } else if (event.message?.attachments?.length) {
+            triggerType = "attachment"
           } else {
             continue
           }
+
+          const attachments = (event.message?.attachments || []).map((attachment: any) => ({
+            type: String(attachment.type || "file"),
+            url: typeof attachment.payload?.url === "string" && /^https:\/\//i.test(attachment.payload.url)
+              ? attachment.payload.url : null,
+          }))
+          const attachmentLabel = attachments.map((attachment: any) =>
+            attachment.type === "image" ? "[사진]" : attachment.type === "video" ? "[동영상]" : attachment.type === "audio" ? "[음성]" : "[첨부파일]",
+          ).join(" ")
 
           console.log(`[webhook] 📩 DM from ${senderId}: "${triggerValue}"`)
 
@@ -574,7 +585,8 @@ export async function POST(request: NextRequest) {
                 user_id: user.id,
                 sender_id: senderId,
                 sender_username: "User",
-                content: event.message?.text ?? triggerValue,
+                content: event.message?.text || attachmentLabel || triggerValue,
+                attachments,
                 is_from_instagram: true,
               })
               if (messageError) throw messageError
@@ -616,7 +628,7 @@ export async function POST(request: NextRequest) {
                           )
                         }
                       }
-                    } else {
+                    } else if (triggerType === "keyword") {
                       match = dmAutomations.find(
                         (a) => a.trigger_type === "keyword" && keywordMatches(a.trigger_value, triggerValue),
                       )
@@ -624,7 +636,7 @@ export async function POST(request: NextRequest) {
 
                     if (!match) {
                       // AI fallback: if no keyword rule matched, try AI auto-reply
-                      if (user.groq_auto_reply_enabled && triggerType !== "postback") {
+                      if (user.groq_auto_reply_enabled && triggerType === "keyword") {
                         console.log(`[webhook] 🤖 No rule match — trying AI auto-reply for DM from ${senderId}`)
                         await sendSenderAction(user.access_token, senderId, "mark_seen")
                         const conv = await incomingSaved // AI needs history; keyword replies do not.

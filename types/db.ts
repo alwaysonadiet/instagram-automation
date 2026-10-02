@@ -15,6 +15,7 @@ export interface Message {
     sender_id: string
     sender_username?: string
     content: string
+    attachments?: { type: string; url: string | null }[]
     is_from_instagram: boolean
     created_at: string
 }

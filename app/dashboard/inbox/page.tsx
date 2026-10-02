@@ -44,7 +44,7 @@ export default function InboxPage() {
             )}>
                 <div className="px-4 py-2 border-b flex items-center justify-between gap-2">
                     <span role="status" className="text-xs text-muted-foreground">{realtime.connected ? "실시간 연결됨" : "실시간 연결 중…"}</span>
-                    <Button size="sm" variant="outline" onClick={realtime.toggleSound} aria-pressed={realtime.soundEnabled}>{realtime.soundEnabled ? "알림음 끄기" : "알림음 켜기"}</Button>
+                    <Button size="sm" variant="outline" onClick={realtime.toggleSound} aria-pressed={realtime.soundEnabled}>{realtime.soundEnabled ? (realtime.soundReady ? "알림음 끄기" : "알림음 켜짐 · 눌러서 활성화") : "알림음 켜기"}</Button>
                 </div>
                 <ConversationList
                     userId={userId}
