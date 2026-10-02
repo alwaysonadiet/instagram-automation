@@ -15,6 +15,8 @@ export default function InboxPage() {
     const [selectedRecipientName, setSelectedRecipientName] = useState<string | null>(null)
     const [selectedRecipientId, setSelectedRecipientId] = useState<string | null>(null)
 
+    const [localRevision, setLocalRevision] = useState(0)
+
     const realtime = useInboxRealtime(userId, selectedConversationId)
 
     const handleSelect = (id: string, name: string, recipientId: string) => {
@@ -48,7 +50,7 @@ export default function InboxPage() {
                 </div>
                 <ConversationList
                     userId={userId}
-                    revision={realtime.listRevision}
+                    revision={realtime.listRevision + localRevision}
                     selectedId={selectedConversationId}
                     onSelect={handleSelect}
                 />
@@ -61,6 +63,7 @@ export default function InboxPage() {
             )}>
                 <ChatWindow
                     revision={realtime.chatRevision}
+                    onStatusChanged={() => { setSelectedConversationId(null); setLocalRevision(n => n + 1) }}
                     conversationId={selectedConversationId}
                     recipientName={selectedRecipientName}
                     recipientId={selectedRecipientId || undefined}

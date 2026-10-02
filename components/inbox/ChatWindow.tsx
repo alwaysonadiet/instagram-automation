@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils"
 import type { Message } from "@/types/db"
 
 interface ChatWindowProps {
+    onStatusChanged?: () => void
     revision?: number
     conversationId: string | null
     recipientId?: string
@@ -15,11 +16,23 @@ interface ChatWindowProps {
     onBack?: () => void
 }
 
-export function ChatWindow({ conversationId, recipientId, recipientName, userId, onBack, revision = 0 }: ChatWindowProps) {
+export function ChatWindow({ conversationId, recipientId, recipientName, userId, onBack, revision = 0, onStatusChanged }: ChatWindowProps) {
     const [messages, setMessages] = useState<Message[]>([])
     const [loading, setLoading] = useState(false)
     const [inputText, setInputText] = useState("")
     const [sending, setSending] = useState(false)
+    const [closing, setClosing] = useState(false)
+    const [closeError, setCloseError] = useState("")
+    const changeStatus = async () => {
+        if (!conversationId || closing) return
+        setClosing(true); setCloseError("")
+        try {
+            const result = await fetch(`/api/inbox/conversations?conversationId=${encodeURIComponent(conversationId)}`, { method: "DELETE" })
+            if (!result.ok) throw new Error("Failed")
+            onStatusChanged?.()
+        } catch { setCloseError("대화를 닫지 못했습니다. 다시 시도해 주세요.") }
+        finally { setClosing(false) }
+    }
     const [isAutomationOpen, setIsAutomationOpen] = useState(false)
     const [automations, setAutomations] = useState<any[]>([])
     const activeConversation = useRef(conversationId)
@@ -138,12 +151,14 @@ export function ChatWindow({ conversationId, recipientId, recipientName, userId,
                     </div>
                 </div>
                 <div className="flex items-center gap-1">
+                    <Button variant="outline" size="sm" disabled={closing} onClick={changeStatus} title="이 앱의 대화 기록을 삭제합니다. 인스타 원본은 유지됩니다.">{closing ? "처리 중…" : "닫기 · 기록 삭제"}</Button>
                     <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground hidden md:flex" aria-label="Call"><Phone className="w-4 h-4" /></Button>
                     <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground hidden md:flex" aria-label="Video"><Video className="w-4 h-4" /></Button>
                     <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground" aria-label="More"><MoreVertical className="w-4 h-4" /></Button>
                 </div>
             </div>
 
+            {closeError && <p role="alert" className="px-4 py-2 text-sm text-destructive">{closeError}</p>}
             {/* Messages Area */}
             <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4 md:space-y-6">
                 {loading ? (
@@ -161,8 +176,20 @@ export function ChatWindow({ conversationId, recipientId, recipientName, userId,
                                         ? "bg-primary text-primary-foreground rounded-br-none"
                                         : "bg-muted text-foreground rounded-bl-none border border-border"
                                 )}>
+                                    {msg.attachments?.filter(a => a.type === "story_reply").map((story, index) => (
+                                        <div key={`story-${index}`} className="mb-2 rounded-lg border border-border p-2 text-xs">
+                                            <p className="mb-1 font-semibold">스토리에 대한 답장</p>
+                                            {story.url && /^https:\/\//i.test(story.url) ? (
+                                                <a href={story.url} target="_blank" rel="noopener noreferrer" className="underline">
+                                                    <img src={story.url} alt="답장한 스토리 미리보기" referrerPolicy="no-referrer" loading="lazy" className="max-h-36 rounded mb-1" onError={e => { e.currentTarget.style.display = "none" }} />
+                                                    답장한 스토리 보기 ↗
+                                                </a>
+                                            ) : <p className="text-muted-foreground">원본 스토리 링크가 전달되지 않았습니다.</p>}
+                                            <p className="mt-1 text-muted-foreground">스토리가 만료되면 원본을 볼 수 없을 수 있습니다.</p>
+                                        </div>
+                                    ))}
                                     {msg.content}
-                                    {msg.attachments?.map((attachment, index) => attachment.url && /^https:\/\//i.test(attachment.url) ? (
+                                    {msg.attachments?.filter(a => a.type !== "story_reply").map((attachment, index) => attachment.url && /^https:\/\//i.test(attachment.url) ? (
                                         <div key={index} className="mt-2">
                                             {attachment.type === "image" ? (
                                                 <a href={attachment.url} target="_blank" rel="noopener noreferrer">

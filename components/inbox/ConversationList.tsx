@@ -49,7 +49,7 @@ export function ConversationList({ userId, selectedId, onSelect, revision = 0 }:
     return (
         <div className="flex flex-col flex-1 min-h-0 border-r border-border bg-card w-full md:w-[350px]">
             <div className="p-4 border-b border-border">
-                <h2 className="text-lg font-semibold text-foreground mb-4">Conversations</h2>
+                <h2 className="text-lg font-semibold text-foreground mb-4">메시지함</h2>
                 <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <input
@@ -62,7 +62,7 @@ export function ConversationList({ userId, selectedId, onSelect, revision = 0 }:
             <div className="flex-1 overflow-y-auto p-2 space-y-1">
                 {conversations.length === 0 ? (
                     <div className="text-center py-10 text-muted-foreground text-sm">
-                        No conversations yet.
+                        진행 중인 대화가 없습니다.
                     </div>
                 ) : (
                     conversations.map((conv) => (

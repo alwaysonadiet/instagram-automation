@@ -164,6 +164,33 @@ async function checkRealtime() {
   }
 }
 
-Promise.resolve().then(checkAuthorization).then(checkOAuthBridge).then(checkRealtime).then(() => {
+async function checkConversationStatus() {
+  let identity = null, owned = true, requestedOwner, requestedId
+  let deleted = false
+  const query = {
+    delete() { deleted = true; return query },
+    eq(key, value) { if (key === 'user_id') requestedOwner = value; if (key === 'id') requestedId = value; return query },
+    select() { return query },
+    maybeSingle: async () => ({ data: owned ? { id: 'own-conversation' } : null }),
+  }
+  const { DELETE } = load('app/api/inbox/conversations/route.ts', {
+    'next/server': { NextResponse: { json: (data, options) => ({ data, status: options?.status || 200 }) } },
+    '@/lib/instagram-auth': { getInstagramIdentity: async () => identity },
+    '@/lib/supabase-server': { getSupabaseServerClient: async () => ({ from: () => query }) },
+  })
+  const request = id => ({ nextUrl: new URL('https://example.test/api/inbox/conversations' + (id ? '?conversationId=' + id : '')) })
+  assert.equal((await DELETE(request('own-conversation'))).status, 401)
+  assert.equal(deleted, false)
+  identity = { userId: '28163924569973068' }
+  assert.equal((await DELETE(request('own-conversation'))).status, 200)
+  assert.equal(deleted, true)
+  assert.equal(requestedOwner, identity.userId)
+  assert.equal(requestedId, 'own-conversation')
+  owned = false
+  assert.equal((await DELETE(request('other'))).status, 404)
+  assert.equal((await DELETE(request(null))).status, 400)
+}
+
+Promise.resolve().then(checkAuthorization).then(checkOAuthBridge).then(checkRealtime).then(checkConversationStatus).then(() => {
   console.log('PASS: verified ownership, no idle polling, event refresh, incoming sound, deduplication, reconnect and cleanup')
 }).catch(error => { console.error(error); process.exitCode = 1 })

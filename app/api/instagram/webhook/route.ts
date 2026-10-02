@@ -536,8 +536,14 @@ export async function POST(request: NextRequest) {
             url: typeof attachment.payload?.url === "string" && /^https:\/\//i.test(attachment.payload.url)
               ? attachment.payload.url : null,
           }))
+          const story = event.message?.reply_to?.story
+          if (story) attachments.unshift({
+            type: "story_reply",
+            id: typeof story.id === "string" ? story.id : null,
+            url: typeof story.url === "string" && /^https:\/\//i.test(story.url) ? story.url : null,
+          })
           const attachmentLabel = attachments.map((attachment: any) =>
-            attachment.type === "image" ? "[사진]" : attachment.type === "video" ? "[동영상]" : attachment.type === "audio" ? "[음성]" : "[첨부파일]",
+            attachment.type === "story_reply" ? "[스토리 답장]" : attachment.type === "image" ? "[사진]" : attachment.type === "video" ? "[동영상]" : attachment.type === "audio" ? "[음성]" : "[첨부파일]",
           ).join(" ")
 
           console.log(`[webhook] 📩 DM from ${senderId}: "${triggerValue}"`)
