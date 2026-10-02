@@ -19,7 +19,7 @@ import {
 import { generateAIReply } from "@/lib/ai-reply"
 import { bumpUnlockAttempt, clearUnlockAttempts, unlockKey } from "@/lib/unlock-tracking"
 
-// New flows always start with the prompt. Legacy cards keep their previous behaviour.
+// Editable follower prompts are sent only when follow status is not confirmed.
 async function sendFollowPrompt(token: string, recipient: { id?: string; comment_id?: string }, content: any, ruleId: string) {
   return sendButtonDM(token, recipient, content.follow_gate.message.trim().slice(0, 640), [{
     type: "postback", title: content.follow_gate.confirm_button?.trim().slice(0, 20) || "팔로우 했어요 ✅",
@@ -362,7 +362,11 @@ export async function POST(request: NextRequest) {
                     // replies to a comment need comment_id.
                     if (content.check_follow === true && content.follow_gate?.message?.trim()) {
                       if (replyMode !== "dm_only") await replyToComment(user.access_token, commentId, getPublicReply())
-                      if (replyMode !== "public_only") await sendFollowPrompt(user.access_token, { comment_id: commentId }, content, match.id)
+                      if (replyMode !== "public_only") {
+                        const status = await verifyFollowStatus(senderId, user.access_token)
+                        if (status.follows === true) await sendAutomationResponse(user.access_token, { comment_id: commentId }, content, { skipTyping: true })
+                        else await sendFollowPrompt(user.access_token, { comment_id: commentId }, content, match.id)
+                      }
                     } else if (content.check_follow === true) {
                       const followResult = await verifyFollowStatus(senderId, user.access_token)
 
@@ -481,7 +485,9 @@ export async function POST(request: NextRequest) {
                                           const content = parseContent(match.response_content)
 
                                           if (content.check_follow === true && content.follow_gate?.message?.trim()) {
-                                            await sendFollowPrompt(user.access_token, { id: senderId }, content, match.id)
+                                            const status = await verifyFollowStatus(senderId, user.access_token)
+                                            if (status.follows === true) await sendAutomationResponse(user.access_token, { id: senderId }, content)
+                                            else await sendFollowPrompt(user.access_token, { id: senderId }, content, match.id)
                                           } else if (content.check_follow === true) {
                                             const followResult = await verifyFollowStatus(senderId, user.access_token)
 
@@ -706,7 +712,11 @@ export async function POST(request: NextRequest) {
                     }
 
                     if (content.check_follow === true && content.follow_gate?.message?.trim() && !isUnlockEvent) {
-                      await sendFollowPrompt(user.access_token, { id: senderId }, content, match.id)
+                      const status = await verifyFollowStatus(senderId, user.access_token)
+                      if (status.follows === true) {
+                        await clearUnlockAttempts(unlockKey(senderId, match.id))
+                        await sendAutomationResponse(user.access_token, { id: senderId }, content)
+                      } else await sendFollowPrompt(user.access_token, { id: senderId }, content, match.id)
                       continue
                     }
 

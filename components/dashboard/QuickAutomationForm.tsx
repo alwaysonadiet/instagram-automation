@@ -135,8 +135,8 @@ export function QuickAutomationForm({ userId, initialSource, onSuccess }: {
       {hasDM && <section className="p-4 space-y-3" aria-label="DM 메시지와 링크 버튼">
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={checkFollow} onChange={event => setCheckFollow(event.target.checked)} />팔로우 확인 후 자료 보내기</label>
         {checkFollow && <div className="rounded-lg border border-border p-3 space-y-3">
-          <p className="text-sm font-medium">1. 첫 안내 DM</p>
-          <p className="text-xs text-muted-foreground">팔로워도 먼저 이 DM을 받아요. 아래 버튼을 누른 뒤 팔로우를 확인합니다.</p>
+          <p className="text-sm font-medium">1. 미팔로워에게 보낼 첫 안내 DM</p>
+          <p className="text-xs text-muted-foreground">이미 팔로워면 아래 자료 DM을 바로 보내요. 미팔로워 또는 확인이 어려운 경우 이 안내를 보내고, 버튼을 누르면 다시 확인합니다.</p>
           <label className="block text-xs">안내 메시지<textarea required maxLength={640} rows={5} value={followGate.message} onChange={event => setFollowGate(previous => ({ ...previous, message: event.target.value }))} className={field + " mt-1"} /></label>
           <label className="block text-xs">팔로우 확인 버튼 이름<input required maxLength={20} value={followGate.confirm_button} onChange={event => setFollowGate(previous => ({ ...previous, confirm_button: event.target.value }))} className={field + " mt-1"} /></label>
           <p className="text-xs text-muted-foreground">버튼 클릭 → 팔로우함: 자료 DM / 팔로우 안 함: 아래 미팔로우 안내</p>

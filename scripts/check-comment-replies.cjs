@@ -69,8 +69,9 @@ async function comment(text, media='carousel', parent=null){
  rules=[{...rule('reply_all',{reply_mode:'dm_only',message:'secret',check_follow:true,follow_gate:gate}),id:'gated'}];
  for(const status of [true,false,null]) {
   followStatus=status;cards=[];buttonMessages=[];dms=[];await comment('any');
-  assert.equal(cards.length,0);assert.equal(dms.length,0);assert.equal(buttonMessages.length,1);
-  assert.equal(buttonMessages[0][2],gate.message);assert.equal(buttonMessages[0][3][0].payload,'UNLOCK_CONTENT_gated');
+  assert.equal(cards.length,0);
+  if(status === true) { assert.equal(dms.length,1);assert.equal(dms[0][2],'secret');assert.equal(buttonMessages.length,0); }
+  else { assert.equal(dms.length,0);assert.equal(buttonMessages.length,1);assert.equal(buttonMessages[0][2],gate.message);assert.equal(buttonMessages[0][3][0].payload,'UNLOCK_CONTENT_gated'); }
  }
  async function unlock(){
   const raw=JSON.stringify({entry:[{id:'business',messaging:[{sender:{id:'sender'},recipient:{id:'business'},postback:{payload:'UNLOCK_CONTENT_gated',title:gate.confirm_button}}]}]});
@@ -81,6 +82,10 @@ async function comment(text, media='carousel', parent=null){
  followStatus=null;dms=[];await unlock();assert.equal(dms.length,1);assert.notEqual(dms[0][2],'secret');
  followStatus=true;dms=[];await unlock();assert.equal(dms.length,1);assert.equal(dms[0][2],'secret');
  rules=[{...rules[0],trigger_source:'dm',trigger_type:'keyword',trigger_value:'자료'}];
- followStatus=true;dms=[];buttonMessages=[];await post({text:'자료'});assert.equal(dms.length,0);assert.equal(buttonMessages.length,1);assert.equal(buttonMessages[0][2],gate.message);
- console.log('PASS: reel/carousel comment handling, reply variants, all comments, modes, keyword precedence and nested reply protection and prompt-first follower branches');
+ for(const status of [true,false,null]) {
+  followStatus=status;dms=[];buttonMessages=[];await post({text:'자료'});
+  if(status===true) {assert.equal(dms.length,1);assert.equal(dms[0][2],'secret');assert.equal(buttonMessages.length,0)}
+  else {assert.equal(dms.length,0);assert.equal(buttonMessages.length,1);assert.equal(buttonMessages[0][2],gate.message)}
+ }
+ console.log('PASS: reel/carousel comment handling, reply variants, all comments, modes, keyword precedence and nested reply protection and existing-follower bypass and follower branches');
 })().catch(e=>{console.error(e);process.exitCode=1});
