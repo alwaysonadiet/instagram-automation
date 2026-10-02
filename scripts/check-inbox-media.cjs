@@ -49,6 +49,9 @@ async function post(message,signatureValid=true,outgoing=false){
  assert.equal(saved[0].content,'Story answer');
  assert.deepEqual(saved[0].attachments,[{type:'story_reply',id:'123',url:'https://example.test/story.jpg'}]);
  
+ saved=[];await post({mid:'button',text:'팔로우 했어요',quick_reply:{payload:'UNLOCK_CONTENT_rule'}});assert.equal(saved.length,0);
+ await post({mid:'action',text:'ACT::d64b322db71e9c27b2ebfc4d0799a5be'});assert.equal(saved.length,0);
+ await post({mid:'human',text:'자료 보내주세요'});assert.equal(saved.length,1);
  saved=[];assert.equal((await post({mid:'m2',text:'blocked'},false)).status,401);assert.equal(saved.length,0);
  await post({mid:'forged',text:'echo',is_echo:true});assert.equal(saved.length,0);
  await post({mid:'echo',text:'My Instagram reply',is_echo:true},true,true);assert.equal(saved.length,1);assert.equal(saved[0].is_from_instagram,false);assert.equal(saved[0].sender_id,'business');assert.equal(sent,0);

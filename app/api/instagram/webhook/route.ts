@@ -546,6 +546,8 @@ export async function POST(request: NextRequest) {
           // Inbox bookkeeping runs alongside delivery, not ahead of it. Always
           // joined below so serverless shutdown cannot discard pending writes.
           const incomingSaved = (async () => {
+          // Postbacks and provider action tokens drive automation, not a human inbox.
+          if (!outgoing && (triggerType === "postback" || /^ACT::[a-zA-Z0-9_-]+$/.test(event.message?.text || ""))) return null
           let conv = null
           try {
             const { data: existing } = await supabase
@@ -555,6 +557,7 @@ export async function POST(request: NextRequest) {
               .eq("recipient_id", senderId)
               .single()
 
+            if (!existing && outgoing) return null // Automated sends alone never open an inbox thread.
             if (!existing) {
               let realUsername = `cnt_${senderId.slice(0, 5)}...`
               const profile = await fetchProfile(user.access_token, senderId)

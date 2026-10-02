@@ -13,6 +13,8 @@ export async function GET(request: NextRequest) {
             .from("messages")
             .select("*")
             .eq("conversation_id", conversationId)
+            .not("content", "like", "ACT::%")
+            .neq("content", "[자동화 버튼 클릭]")
             .order("created_at", { ascending: true })
 
         if (error) throw error

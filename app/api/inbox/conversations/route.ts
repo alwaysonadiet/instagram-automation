@@ -12,13 +12,15 @@ export async function GET(request: NextRequest) {
         // Fetch conversations sorted by last message
         const { data: conversations, error } = await supabase
             .from("conversations")
-            .select("*")
+            .select("*,messages!inner(id)")
             .eq("user_id", userId)
+            .not("messages.content", "like", "ACT::%")
+            .neq("messages.content", "[자동화 버튼 클릭]")
             .order("last_message_at", { ascending: false })
 
         if (error) throw error
 
-        return NextResponse.json(conversations)
+        return NextResponse.json((conversations || []).map(({ messages, ...conversation }) => conversation))
     } catch (error) {
         console.error("[Inbox] Conversations GET error:", error)
         return NextResponse.json({ error: "Failed to fetch conversations" }, { status: 500 })
