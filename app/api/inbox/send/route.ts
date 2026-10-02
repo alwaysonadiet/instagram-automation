@@ -61,8 +61,9 @@ export async function POST(request: NextRequest) {
         // If conversation doesn't exist (unlikely if replying, but possible if initiating), create it logic is tricky here 
         // without knowing username. Assuming it exists for now as this is usually a reply flow.
 
+        let savedMessage = null
         if (conv) {
-            await supabase.from("messages").insert({
+            const { data: inserted, error: saveError } = await supabase.from("messages").insert({
                 id: `mid_out_${Date.now()}_${Math.random()}`,
                 conversation_id: conv.id,
                 user_id: userId,
@@ -70,7 +71,9 @@ export async function POST(request: NextRequest) {
                 sender_username: user.username,
                 content: message || "[Attachment]",
                 is_from_instagram: false
-            })
+            }).select("*").single()
+            if (saveError) console.error("[Inbox Send] Failed to save outbound message", saveError.message)
+            savedMessage = inserted
 
             // Update conversation timestamp
             await supabase
@@ -79,7 +82,7 @@ export async function POST(request: NextRequest) {
                 .eq("id", conv.id)
         }
 
-        return NextResponse.json({ success: true, data })
+        return NextResponse.json({ success: true, data, savedMessage })
 
     } catch (error) {
         console.error("[Inbox Send] Internal Error:", error)

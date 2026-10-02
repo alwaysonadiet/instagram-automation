@@ -22,6 +22,8 @@ export function ChatWindow({ conversationId, recipientId, recipientName, userId,
     const [sending, setSending] = useState(false)
     const [isAutomationOpen, setIsAutomationOpen] = useState(false)
     const [automations, setAutomations] = useState<any[]>([])
+    const activeConversation = useRef(conversationId)
+    activeConversation.current = conversationId
     const loadedConversation = useRef<string | null>(null)
     const bottomRef = useRef<HTMLDivElement>(null)
 
@@ -82,18 +84,15 @@ export function ChatWindow({ conversationId, recipientId, recipientName, userId,
 
             if (res.ok) {
                 setInputText("")
-                // Optimistic update
-                const newMsg: Message = {
-                    id: `temp_${Date.now()}`,
-                    conversation_id: conversationId!,
-                    user_id: userId,
-                    sender_id: "me",
-                    sender_username: "Me",
-                    content: text,
-                    is_from_instagram: false,
-                    created_at: new Date().toISOString()
+                const result = await res.json()
+                // Realtime may already have fetched this row: use the stored ID to avoid duplicates.
+                if (result.savedMessage) {
+                    const stored: Message = result.savedMessage
+                    if (stored.conversation_id === activeConversation.current) {
+                        setMessages(prev => prev.some(msg => msg.id === stored.id) ? prev : [...prev, stored].sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at)))
+                    }
                 }
-                setMessages(prev => [...prev, newMsg])
+
             }
         } catch (e) {
             console.error("Send failed", e)
