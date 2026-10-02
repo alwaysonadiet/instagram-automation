@@ -14,6 +14,10 @@ const GITHUB_URL = "https://github.com/ayuuxh2/insta-p8"
 export function LandingPage() {
   const [stars, setStars] = useState<number | null>(null)
   const router = useRouter()
+  const [loginUrl, setLoginUrl] = useState("")
+  const [preparingLogin, setPreparingLogin] = useState(false)
+  const [loginError, setLoginError] = useState("")
+  const [copiedLogin, setCopiedLogin] = useState(false)
 
   useEffect(() => {
     fetch("https://api.github.com/repos/ayuuxh2/insta-p8")
@@ -22,8 +26,31 @@ export function LandingPage() {
       .catch(() => {})
   }, [])
 
+  const prepareBrowserLogin = async () => {
+    if (preparingLogin) return
+    setPreparingLogin(true)
+    setLoginError("")
+    setCopiedLogin(false)
+    try {
+      const response = await fetch("/api/instagram/login?format=json", { cache: "no-store" })
+      const data = await response.json()
+      if (!response.ok || typeof data.url !== "string" || !data.url.startsWith("https://www.instagram.com/oauth/authorize?")) throw new Error("login")
+      setLoginUrl(data.url)
+    } catch {
+      setLoginError("로그인 주소를 준비하지 못했어요. 잠시 후 다시 눌러주세요.")
+    } finally { setPreparingLogin(false) }
+  }
+
   const handleLogin = () => {
+    // Pasting the official URL into Safari avoids iOS handing it to the app.
+    const isiOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1
+    if (isiOS) { void prepareBrowserLogin(); return }
     window.location.href = "/api/instagram/login"
+  }
+
+  const copyLoginUrl = async () => {
+    try { await navigator.clipboard.writeText(loginUrl); setCopiedLogin(true) }
+    catch { setLoginError("아래 주소를 길게 눌러 전체 선택 후 복사해주세요.") }
   }
 
   const handleTestLogin = () => {
@@ -49,6 +76,19 @@ export function LandingPage() {
       `}</style>
 
       <div className="grain" />
+      {loginUrl && (
+        <div className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center p-5" role="dialog" aria-modal="true" aria-labelledby="browser-login-title">
+          <div className="w-full max-w-md rounded-2xl border border-white/20 bg-[#151515] p-6 space-y-4">
+            <h2 id="browser-login-title" className="text-lg font-semibold">Safari에서 인스타 로그인</h2>
+            <p className="text-sm text-neutral-300 leading-relaxed">1. 아래 버튼으로 로그인 주소를 복사하세요.<br />2. 지금 열려 있는 Safari의 주소창에 붙여 넣고 ‘이동’을 누르세요.<br />3. 인스타 웹에서 로그인하고 연결을 승인하면 이 사이트로 돌아와요.</p>
+            <p className="text-xs text-neutral-400">인스타 앱의 ‘열기’ 버튼은 누르지 마세요. 주소는 10분 동안 유효해요. 현재 Safari 창에서 진행해주세요.</p>
+            <input aria-label="인스타 로그인 주소" readOnly value={loginUrl} onFocus={event => event.currentTarget.select()} className="w-full rounded-lg border border-white/20 bg-black p-3 text-xs" />
+            <button type="button" onClick={copyLoginUrl} className="w-full rounded-full bg-[#ffe14d] text-black px-5 py-3 font-semibold">{copiedLogin ? "복사 완료 · Safari 주소창에 붙여 넣으세요" : "로그인 주소 복사"}</button>
+            <button type="button" onClick={() => setLoginUrl("")} className="w-full text-sm text-neutral-400 py-2">닫기</button>
+            {loginError && <p role="alert" className="text-sm text-red-300">{loginError}</p>}
+          </div>
+        </div>
+      )}
 
       {/* Nav */}
       <nav className="relative z-50 flex items-center justify-between px-5 md:px-10 h-16 border-b border-white/[0.08]">
@@ -113,7 +153,12 @@ export function LandingPage() {
                 Connect Instagram
                 <ArrowUpRight className="w-4 h-4 group-hover:rotate-45 transition-transform" />
               </button>
-              <p className="w-full text-xs text-neutral-400">모바일은 이 사이트를 Safari 또는 Chrome에서 직접 열어 로그인해주세요. 인스타 앱으로 넘어가면 브라우저로 돌아와 같은 창에서 다시 연결해주세요.</p>
+              <div className="w-full text-xs text-neutral-400">
+                <button type="button" onClick={prepareBrowserLogin} disabled={preparingLogin} className="underline underline-offset-4 disabled:opacity-50">
+                  {preparingLogin ? "로그인 주소 준비 중…" : "인스타 앱으로 넘어가서 안 되나요? Safari 로그인 주소 받기"}
+                </button>
+                {loginError && <p role="alert" className="mt-2 text-red-300">{loginError}</p>}
+              </div>
               {process.env.NODE_ENV === "development" && (
                 <button
                   onClick={handleTestLogin}
