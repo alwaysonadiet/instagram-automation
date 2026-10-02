@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils"
 import type { Message } from "@/types/db"
 
 interface ChatWindowProps {
+    revision?: number
     conversationId: string | null
     recipientId?: string
     recipientName: string | null
@@ -14,35 +15,42 @@ interface ChatWindowProps {
     onBack?: () => void
 }
 
-export function ChatWindow({ conversationId, recipientId, recipientName, userId, onBack }: ChatWindowProps) {
+export function ChatWindow({ conversationId, recipientId, recipientName, userId, onBack, revision = 0 }: ChatWindowProps) {
     const [messages, setMessages] = useState<Message[]>([])
     const [loading, setLoading] = useState(false)
     const [inputText, setInputText] = useState("")
     const [sending, setSending] = useState(false)
     const [isAutomationOpen, setIsAutomationOpen] = useState(false)
     const [automations, setAutomations] = useState<any[]>([])
+    const loadedConversation = useRef<string | null>(null)
     const bottomRef = useRef<HTMLDivElement>(null)
 
     useEffect(() => {
         if (!conversationId) return
+        const controller = new AbortController()
 
         const fetchMessages = async () => {
-            setLoading(true)
+            if (loadedConversation.current !== conversationId) {
+                setLoading(true)
+                setMessages([])
+            }
             try {
-                const res = await fetch(`/api/inbox/messages?conversationId=${conversationId}`)
+                const res = await fetch(`/api/inbox/messages?conversationId=${conversationId}`, { signal: controller.signal, cache: "no-store" })
                 const data = await res.json()
-                if (Array.isArray(data)) {
+                if (!controller.signal.aborted && Array.isArray(data)) {
+                    loadedConversation.current = conversationId
                     setMessages(data)
                 }
             } catch (error) {
-                console.error("Failed to load messages", error)
+                if (!controller.signal.aborted) console.error("Failed to load messages", error)
             } finally {
-                setLoading(false)
+                if (!controller.signal.aborted) setLoading(false)
             }
         }
 
         fetchMessages()
-    }, [conversationId])
+        return () => controller.abort()
+    }, [conversationId, revision])
 
     // Fetch automations for quick reply
     useEffect(() => {

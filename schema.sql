@@ -408,6 +408,7 @@ ALTER TABLE public.unlock_attempts ENABLE ROW LEVEL SECURITY;
 CREATE OR REPLACE FUNCTION public.bump_unlock_attempt(p_key TEXT)
 RETURNS INTEGER
 LANGUAGE plpgsql
+SET search_path = public
 AS $$
 DECLARE
   v_count INTEGER;
@@ -431,3 +432,27 @@ $$;
 -- Or run manually in the SQL editor:
 --   DELETE FROM public.unlock_attempts WHERE updated_at < NOW() - INTERVAL '24 hours';
 -- =========================================================================
+
+-- Apply last: browsers use verified Supabase Auth and can only read their own inbox.
+-- Browser data access is read-only and scoped to a server-assigned Instagram identity.
+REVOKE ALL ON ALL TABLES IN SCHEMA public FROM anon, authenticated;
+REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM anon, authenticated;
+DO $$
+DECLARE p record;
+BEGIN
+  FOR p IN SELECT policyname,tablename FROM pg_policies WHERE schemaname='public' AND tablename IN ('messages','conversations')
+  LOOP EXECUTE format('DROP POLICY %I ON public.%I',p.policyname,p.tablename); END LOOP;
+END $$;
+ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.conversations ENABLE ROW LEVEL SECURITY;
+GRANT SELECT ON public.messages, public.conversations TO authenticated;
+CREATE POLICY inbox_messages_read_own ON public.messages FOR SELECT TO authenticated
+USING (user_id::text = (SELECT auth.jwt()->'app_metadata'->>'instagram_user_id'));
+CREATE POLICY inbox_conversations_read_own ON public.conversations FOR SELECT TO authenticated
+USING (user_id::text = (SELECT auth.jwt()->'app_metadata'->>'instagram_user_id'));
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname='supabase_realtime' AND schemaname='public' AND tablename='messages') THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.messages;
+  END IF;
+END $$;

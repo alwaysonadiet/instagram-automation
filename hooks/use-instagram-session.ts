@@ -3,6 +3,18 @@
 import { useState, useEffect } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 
+// A single OAuth code exchange shared by concurrent mounted hooks / StrictMode.
+const pendingCodes = new Map<string, Promise<any>>()
+function exchangeCode(code: string) {
+    let pending = pendingCodes.get(code)
+    if (!pending) {
+        pending = fetch("/api/instagram/callback", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code }) }).then(res => res.json())
+        pendingCodes.set(code, pending)
+        void pending.finally(() => setTimeout(() => pendingCodes.delete(code), 30000)).catch(() => {})
+    }
+    return pending
+}
+
 export function useInstagramSession() {
     const [username, setUsername] = useState<string | null>(null)
     const [userId, setUserId] = useState<string | null>(null)
@@ -19,11 +31,7 @@ export function useInstagramSession() {
             // CASE A: New Login from Instagram
             if (code) {
                 try {
-                    const res = await fetch("/api/instagram/callback", {
-                        method: "POST",
-                        body: JSON.stringify({ code }),
-                    })
-                    const data = await res.json()
+                    const data = await exchangeCode(code)
 
                     if (data.success) {
                         localStorage.setItem("ig_user_id", data.userId)
@@ -35,6 +43,8 @@ export function useInstagramSession() {
                         setProfilePic(data.profilePic || null)
                         // Remove code from URL
                         router.replace("/dashboard")
+                    } else {
+                        router.replace("/?error=login_failed")
                     }
                 } catch (err) {
                     console.error("Login failed:", err)
@@ -42,14 +52,19 @@ export function useInstagramSession() {
             }
             // CASE B: Restore Session from LocalStorage
             else {
-                const savedId = localStorage.getItem("ig_user_id")
-                const savedName = localStorage.getItem("ig_username")
+                try {
+                    const res = await fetch("/api/session", { cache: "no-store" })
+                    if (res.ok) {
+                        const session = await res.json()
+                        setUserId(session.userId)
+                        setUsername(session.username)
+                        setProfilePic(session.profilePic)
+                    } else {
+                        localStorage.removeItem("ig_user_id")
+                        localStorage.removeItem("ig_username")
+                    }
+                } catch { /* A network error is not an authenticated session. */ }
 
-                if (savedId && savedName) {
-                    setUserId(savedId)
-                    setUsername(savedName)
-                    setProfilePic(localStorage.getItem("ig_profile_pic"))
-                }
             }
             setIsLoading(false)
         }
@@ -57,7 +72,8 @@ export function useInstagramSession() {
         handleSession()
     }, [searchParams, router])
 
-    const logout = () => {
+    const logout = async () => {
+        await fetch("/api/session", { method: "DELETE" })
         localStorage.removeItem("ig_user_id")
         localStorage.removeItem("ig_username")
         localStorage.removeItem("ig_profile_pic")

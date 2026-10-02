@@ -11,7 +11,7 @@ export default function DashboardLayout({
 }: {
     children: React.ReactNode
 }) {
-    const { username, profilePic, logout, isLoading } = useInstagramSession()
+    const { userId, username, profilePic, logout, isLoading } = useInstagramSession()
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
 
     useEffect(() => {
@@ -33,6 +33,8 @@ export default function DashboardLayout({
             </div>
         )
     }
+
+    if (!userId) return <div className="min-h-screen flex flex-col items-center justify-center gap-4"><p>다시 로그인해 주세요.</p><a className="underline" href="/api/instagram/login">Instagram 연결하기</a></div>
 
     return (
         <div className="flex min-h-screen bg-background text-foreground">

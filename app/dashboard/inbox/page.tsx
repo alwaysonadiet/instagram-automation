@@ -4,6 +4,8 @@ import { useState } from "react"
 import { useInstagramSession } from "@/hooks/use-instagram-session"
 import { ConversationList } from "@/components/inbox/ConversationList"
 import { ChatWindow } from "@/components/inbox/ChatWindow"
+import { useInboxRealtime } from "@/hooks/use-inbox-realtime"
+import { Button } from "@/components/ui/button"
 import { Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -12,6 +14,8 @@ export default function InboxPage() {
     const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null)
     const [selectedRecipientName, setSelectedRecipientName] = useState<string | null>(null)
     const [selectedRecipientId, setSelectedRecipientId] = useState<string | null>(null)
+
+    const realtime = useInboxRealtime(userId, selectedConversationId)
 
     const handleSelect = (id: string, name: string, recipientId: string) => {
         setSelectedConversationId(id)
@@ -35,11 +39,16 @@ export default function InboxPage() {
         <div className="h-[calc(100vh-3rem)] m-6 rounded-xl overflow-hidden border border-border bg-card flex relative">
             {/* Left Sidebar: Conversation List */}
             <div className={cn(
-                "w-full md:w-[360px] flex-shrink-0 border-r border-border bg-card absolute md:static inset-0 z-10 transition-transform duration-200 md:translate-x-0 h-full",
+                "w-full md:w-[360px] flex-shrink-0 border-r border-border bg-card flex flex-col absolute md:static inset-0 z-10 transition-transform duration-200 md:translate-x-0 h-full",
                 selectedConversationId ? "-translate-x-full md:translate-x-0" : "translate-x-0"
             )}>
+                <div className="px-4 py-2 border-b flex items-center justify-between gap-2">
+                    <span role="status" className="text-xs text-muted-foreground">{realtime.connected ? "실시간 연결됨" : "실시간 연결 중…"}</span>
+                    <Button size="sm" variant="outline" onClick={realtime.toggleSound} aria-pressed={realtime.soundEnabled}>{realtime.soundEnabled ? "알림음 끄기" : "알림음 켜기"}</Button>
+                </div>
                 <ConversationList
                     userId={userId}
+                    revision={realtime.listRevision}
                     selectedId={selectedConversationId}
                     onSelect={handleSelect}
                 />
@@ -51,6 +60,7 @@ export default function InboxPage() {
                 selectedConversationId ? "translate-x-0" : "translate-x-full md:translate-x-0"
             )}>
                 <ChatWindow
+                    revision={realtime.chatRevision}
                     conversationId={selectedConversationId}
                     recipientName={selectedRecipientName}
                     recipientId={selectedRecipientId || undefined}

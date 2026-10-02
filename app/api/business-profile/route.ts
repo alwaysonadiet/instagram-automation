@@ -1,21 +1,11 @@
+import { getInstagramIdentity } from "@/lib/instagram-auth"
 import { type NextRequest, NextResponse } from "next/server"
 import { getSupabaseServerClient } from "@/lib/supabase-server"
 
 type Knowledge = Record<string, string>
 
-function getSessionUserId(request: NextRequest): string | null {
-    try {
-        const raw = request.cookies.get("insta_session")?.value
-        if (!raw) return null
-        const session = JSON.parse(raw) as { userId?: string }
-        return session.userId || null
-    } catch {
-        return null
-    }
-}
-
 export async function GET(request: NextRequest) {
-    const sessionUserId = getSessionUserId(request)
+    const sessionUserId = (await getInstagramIdentity())?.userId
     const requestedUserId = request.nextUrl.searchParams.get("userId")
     if (!sessionUserId || !requestedUserId || sessionUserId !== requestedUserId) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -35,7 +25,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
-    const sessionUserId = getSessionUserId(request)
+    const sessionUserId = (await getInstagramIdentity())?.userId
     const body = await request.json()
     const { userId, knowledge } = body as { userId?: string; knowledge?: Knowledge }
     if (!sessionUserId || !userId || sessionUserId !== userId || !knowledge || typeof knowledge !== "object" || Array.isArray(knowledge)) {

@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto"
+import { getAuthClient } from "@/lib/instagram-auth"
 import { type NextRequest, NextResponse } from "next/server"
 import { getSupabaseServerClient } from "@/lib/supabase-server"
 
@@ -13,9 +15,14 @@ export async function GET(request: NextRequest) {
   }
 
   if (code) {
+    const expectedState = request.cookies.get("ig_oauth_state")?.value
+    if (!expectedState || searchParams.get("state") !== expectedState) return NextResponse.json({ error: "Login expired. Please start again." }, { status: 400 })
     const redirectUrl = new URL("/", request.url)
     redirectUrl.searchParams.set("code", code)
-    return NextResponse.redirect(redirectUrl)
+    const response = NextResponse.redirect(redirectUrl)
+    response.cookies.delete("ig_oauth_state")
+    response.cookies.set("ig_oauth_code", createHash("sha256").update(code).digest("hex"), { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/", maxAge: 300 })
+    return response
   }
 
   return NextResponse.json({ error: "Invalid callback" }, { status: 400 })
@@ -25,6 +32,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const { code } = body
+    if (typeof code !== "string" || request.cookies.get("ig_oauth_code")?.value !== createHash("sha256").update(code).digest("hex")) return NextResponse.json({ error: "Please start Instagram login again" }, { status: 400 })
     if (!code) return NextResponse.json({ error: "No code" }, { status: 400 })
 
     // 1. Env Vars
@@ -117,7 +125,31 @@ export async function POST(request: NextRequest) {
 
     if (upsertError) throw upsertError
 
+    // Only a verified Instagram OAuth exchange can assign this trusted ownership claim.
+    // generateLink creates an internal Auth identity without sending an email.
+    const { data: link, error: linkError } = await supabase.auth.admin.generateLink({
+      type: "magiclink", email: `instagram-${loginUserId}@accounts.ladynomad.invalid`,
+    })
+    if (linkError || !link.user || !link.properties) throw new Error("Could not establish secure login")
+    const { error: identityError } = await supabase.auth.admin.updateUserById(link.user.id, {
+      app_metadata: { instagram_user_id: loginUserId, instagram_username: username, instagram_profile_pic: profilePic },
+    })
+    if (identityError) throw new Error("Could not verify account ownership")
+    const auth = await getAuthClient()
+    const { error: sessionError } = await auth.auth.verifyOtp({ token_hash: link.properties.hashed_token, type: "email" })
+    if (sessionError) throw new Error("Could not establish secure session")
+
+    // Ensure this professional account sends message events to the configured app webhook.
+    const subscriptionRes = await fetch(`https://graph.instagram.com/v24.0/${businessAccountId}/subscribed_apps`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded", Authorization: `Bearer ${accessToken}` },
+      body: new URLSearchParams({ subscribed_fields: "messages,messaging_postbacks,messaging_seen,message_reactions,comments,live_comments" }),
+    })
+    const subscription = await subscriptionRes.json()
+    if (!subscriptionRes.ok || !subscription.success) console.error("[webhook] Account subscription failed", subscription.error?.code)
+
     const response = NextResponse.json({ success: true, username, userId: loginUserId, profilePic })
+    response.cookies.delete("ig_oauth_code")
     response.cookies.set("insta_session", JSON.stringify({ username, userId: loginUserId }), {
       path: "/",
       maxAge: expiresIn,

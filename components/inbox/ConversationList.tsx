@@ -6,34 +6,37 @@ import { cn } from "@/lib/utils"
 import type { Conversation } from "@/types/db"
 
 interface ConversationListProps {
+    revision?: number
     userId: string
     selectedId: string | null
     onSelect: (id: string, username: string, recipientId: string) => void
 }
 
-export function ConversationList({ userId, selectedId, onSelect }: ConversationListProps) {
+export function ConversationList({ userId, selectedId, onSelect, revision = 0 }: ConversationListProps) {
     const [conversations, setConversations] = useState<Conversation[]>([])
     const [loading, setLoading] = useState(true)
 
     useEffect(() => {
         if (!userId) return
+        const controller = new AbortController()
 
         const fetchConversations = async () => {
             try {
-                const res = await fetch(`/api/inbox/conversations?userId=${userId}`)
+                const res = await fetch(`/api/inbox/conversations?userId=${userId}`, { signal: controller.signal, cache: "no-store" })
                 const data = await res.json()
-                if (Array.isArray(data)) {
+                if (!controller.signal.aborted && Array.isArray(data)) {
                     setConversations(data)
                 }
             } catch (error) {
-                console.error("Failed to load conversations", error)
+                if (!controller.signal.aborted) console.error("Failed to load conversations", error)
             } finally {
-                setLoading(false)
+                if (!controller.signal.aborted) setLoading(false)
             }
         }
 
         fetchConversations()
-    }, [userId])
+        return () => controller.abort()
+    }, [userId, revision])
 
     if (loading) {
         return (
@@ -44,7 +47,7 @@ export function ConversationList({ userId, selectedId, onSelect }: ConversationL
     }
 
     return (
-        <div className="flex flex-col h-full border-r border-border bg-card w-full md:w-[350px]">
+        <div className="flex flex-col flex-1 min-h-0 border-r border-border bg-card w-full md:w-[350px]">
             <div className="p-4 border-b border-border">
                 <h2 className="text-lg font-semibold text-foreground mb-4">Conversations</h2>
                 <div className="relative">
