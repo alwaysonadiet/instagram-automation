@@ -61,7 +61,7 @@ export default function AutomationsPage() {
       <button className="mb-4 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground" onClick={() => setEdit(null)}><ArrowLeft className="size-4" />Back to auto replies</button>
       <CreateRuleForm key={edit.id} userId={userId} triggerSource={edit.trigger_source} editRule={edit} onSuccess={() => { setEdit(null); void refresh() }} />
     </section> : <>
-      <QuickAutomationForm userId={userId} initialSource="dm" onSuccess={() => { setSaved(true); void refresh() }} />
+      <QuickAutomationForm userId={userId} initialSource="comment" onSuccess={() => { setSaved(true); void refresh() }} />
       {saved && <p role="status" className="mt-3 text-xs text-muted-foreground">Saved and active. You can add another reply above.</p>}
       <section className="mt-10">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
