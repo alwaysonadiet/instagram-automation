@@ -29,8 +29,8 @@ const source=fs.readFileSync(path+'/app/api/instagram/webhook/route.ts','utf8');
 const compiled=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,esModuleInterop:true,target:ts.ScriptTarget.ES2022}}).outputText;
 const mod={exports:{}};
 new Function('require','module','exports',compiled)(n=>mocks[n]||require(n),mod,mod.exports);
-async function post(message,signatureValid=true){
- const raw=JSON.stringify({entry:[{id:'business',messaging:[{sender:{id:'sender'},recipient:{id:'business'},message}]}]});
+async function post(message,signatureValid=true,outgoing=false){
+ const raw=JSON.stringify({entry:[{id:'business',messaging:[{sender:{id:outgoing?'business':'sender'},recipient:{id:outgoing?'sender':'business'},message}]}]});
  const sig='sha256='+crypto.createHmac('sha256',signatureValid?'test-secret':'wrong').update(raw).digest('hex');
  return mod.exports.POST({text:async()=>raw,headers:{get:()=>sig}});
 }
@@ -50,6 +50,7 @@ async function post(message,signatureValid=true){
  assert.deepEqual(saved[0].attachments,[{type:'story_reply',id:'123',url:'https://example.test/story.jpg'}]);
  
  saved=[];assert.equal((await post({mid:'m2',text:'blocked'},false)).status,401);assert.equal(saved.length,0);
- await post({mid:'echo',text:'echo',is_echo:true});assert.equal(saved.length,0);
+ await post({mid:'forged',text:'echo',is_echo:true});assert.equal(saved.length,0);
+ await post({mid:'echo',text:'My Instagram reply',is_echo:true},true,true);assert.equal(saved.length,1);assert.equal(saved[0].is_from_instagram,false);assert.equal(saved[0].sender_id,'business');assert.equal(sent,0);
  console.log('PASS: text, media and story context saved; signatures and echoes remain protected.');
 })().catch(e=>{console.error(e);process.exitCode=1});

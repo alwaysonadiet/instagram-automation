@@ -26,9 +26,12 @@ export async function GET(request: NextRequest) {
     // Hum '/me' use kar rahe hain taaki ID mismatch ka lafda hi na ho.
     const url = `https://graph.instagram.com/me/media?fields=id,caption,media_type,media_url,thumbnail_url,permalink,timestamp&limit=24&access_token=${user.access_token}`
 
-    console.log("[v0] Fetching Media from:", url)
+    // Never log the access token.
 
-    const res = await fetch(url, { cache: 'no-store' })
+    const mediaUrl = new URL(url)
+    const after = searchParams.get("after")
+    if (after) mediaUrl.searchParams.set("after", after)
+    const res = await fetch(mediaUrl, { cache: 'no-store' })
     const data = await res.json()
 
     if (data.error) {
@@ -49,7 +52,7 @@ export async function GET(request: NextRequest) {
       }))
       .filter((m: any) => typeof m.image_url === "string" && m.image_url.length > 0)
 
-    return NextResponse.json({ data: normalized })
+    return NextResponse.json({ data: normalized, next_cursor: data.paging?.next ? data.paging?.cursors?.after || null : null })
   } catch (error) {
     console.error("[v0] Server Error:", error)
     return NextResponse.json({ error: "Server Error" }, { status: 500 })

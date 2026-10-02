@@ -188,7 +188,7 @@ export function ChatWindow({ conversationId, recipientId, recipientName, userId,
                                             <p className="mt-1 text-muted-foreground">스토리가 만료되면 원본을 볼 수 없을 수 있습니다.</p>
                                         </div>
                                     ))}
-                                    {msg.content}
+                                    {/^ACT::[a-zA-Z0-9_-]+$/.test(msg.content || "") ? "[자동화 버튼 클릭]" : msg.content}
                                     {msg.attachments?.filter(a => a.type !== "story_reply").map((attachment, index) => attachment.url && /^https:\/\//i.test(attachment.url) ? (
                                         <div key={index} className="mt-2">
                                             {attachment.type === "image" ? (

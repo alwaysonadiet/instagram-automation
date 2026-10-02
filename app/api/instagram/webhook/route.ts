@@ -211,10 +211,10 @@ export async function POST(request: NextRequest) {
     const supabase = await getSupabaseServerClient()
 
     for (const entry of body.entry) {
-      // Skip pure system events (echo / read / delivery)
+      // Skip pure read / delivery / reaction events; echoes are inbox records.
       if (entry.messaging) {
         const isSystemEvent = entry.messaging.every(
-          (event: any) => event.read || event.delivery || (event.message && event.message.is_echo),
+          (event: any) => event.read || event.delivery || event.reaction,
         )
         if (isSystemEvent) continue
       }
@@ -499,10 +499,14 @@ export async function POST(request: NextRequest) {
       // ============================================================
       if (entry.messaging) {
         for (const event of entry.messaging) {
-          if (event.read || event.delivery || event.reaction || event.message?.is_echo) continue
+          if (event.read || event.delivery || event.reaction) continue
 
-          const senderId = event.sender.id
-          if (senderId === webhookId || senderId === user.business_account_id || senderId === user.page_id) continue
+          const businessSender = event.sender?.id === webhookId || event.sender?.id === user.business_account_id || event.sender?.id === user.page_id
+          const outgoing = event.message?.is_echo === true || businessSender
+          // Accept echoes only from this account, never trust a customer's is_echo flag.
+          if (event.message?.is_echo && !businessSender) continue
+          const senderId = outgoing ? event.recipient?.id : event.sender?.id
+          if (!senderId || senderId === webhookId || senderId === user.business_account_id || senderId === user.page_id) continue
 
           let triggerType = ""
           let triggerValue = ""
@@ -580,11 +584,11 @@ export async function POST(request: NextRequest) {
                 id: event.message?.mid || `mid_${Date.now()}_${Math.random()}`,
                 conversation_id: conv.id,
                 user_id: user.id,
-                sender_id: senderId,
-                sender_username: "User",
-                content: event.message?.text || attachmentLabel || triggerValue,
+                sender_id: outgoing ? event.sender.id : senderId,
+                sender_username: outgoing ? user.username : "User",
+                content: event.postback?.title || event.message?.text || attachmentLabel || (triggerType === "postback" ? "[자동화 버튼 클릭]" : triggerValue),
                 attachments,
-                is_from_instagram: true,
+                is_from_instagram: !outgoing,
               })
               if (messageError) throw messageError
             }
@@ -593,6 +597,8 @@ export async function POST(request: NextRequest) {
           }
           return conv
           })()
+
+          if (outgoing) { await incomingSaved; continue }
 
           try {
           // ---------- Match automation ----------
@@ -701,7 +707,7 @@ export async function POST(request: NextRequest) {
                           if (result?.ok && conv) {
                             try {
                               await supabase.from("messages").insert({
-                                id: `mid_reply_${Date.now()}_${Math.random()}`,
+                                id: result?.id || `mid_reply_${Date.now()}_${Math.random()}`,
                                 conversation_id: conv.id,
                                 user_id: user.id,
                                 sender_id: user.business_account_id,
@@ -721,7 +727,7 @@ export async function POST(request: NextRequest) {
                           if (result?.ok && conv) {
                             try {
                               await supabase.from("messages").insert({
-                                id: `mid_reply_${Date.now()}_${Math.random()}`,
+                                id: result?.id || `mid_reply_${Date.now()}_${Math.random()}`,
                                 conversation_id: conv.id,
                                 user_id: user.id,
                                 sender_id: user.business_account_id,
@@ -748,7 +754,7 @@ export async function POST(request: NextRequest) {
                                                     if (result?.ok && conv) {
                                                       try {
                                                         await supabase.from("messages").insert({
-                                                          id: `mid_reply_${Date.now()}_${Math.random()}`,
+                                                          id: result?.id || `mid_reply_${Date.now()}_${Math.random()}`,
                                                           conversation_id: conv.id,
                                                           user_id: user.id,
                                                           sender_id: user.business_account_id,
@@ -767,7 +773,7 @@ export async function POST(request: NextRequest) {
                                                     if (result?.ok && conv) {
                                                       try {
                                                         await supabase.from("messages").insert({
-                                                          id: `mid_reply_${Date.now()}_${Math.random()}`,
+                                                          id: result?.id || `mid_reply_${Date.now()}_${Math.random()}`,
                                                           conversation_id: conv.id,
                                                           user_id: user.id,
                                                           sender_id: user.business_account_id,
@@ -793,7 +799,7 @@ export async function POST(request: NextRequest) {
                           if (result?.ok && conv) {
                             try {
                               await supabase.from("messages").insert({
-                                id: `mid_reply_${Date.now()}_${Math.random()}`,
+                                id: result?.id || `mid_reply_${Date.now()}_${Math.random()}`,
                                 conversation_id: conv.id,
                                 user_id: user.id,
                                 sender_id: user.business_account_id,
@@ -813,7 +819,7 @@ export async function POST(request: NextRequest) {
                           if (result?.ok && conv) {
                             try {
                               await supabase.from("messages").insert({
-                                id: `mid_reply_${Date.now()}_${Math.random()}`,
+                                id: result?.id || `mid_reply_${Date.now()}_${Math.random()}`,
                                 conversation_id: conv.id,
                                 user_id: user.id,
                                 sender_id: user.business_account_id,
@@ -836,7 +842,7 @@ export async function POST(request: NextRequest) {
                             if (result?.ok && conv) {
                               try {
                                 await supabase.from("messages").insert({
-                                  id: `mid_reply_${Date.now()}_${Math.random()}`,
+                                  id: result?.id || `mid_reply_${Date.now()}_${Math.random()}`,
                                   conversation_id: conv.id,
                                   user_id: user.id,
                                   sender_id: user.business_account_id,
@@ -858,7 +864,7 @@ export async function POST(request: NextRequest) {
                       if (result?.ok && conv) {
                         try {
                           await supabase.from("messages").insert({
-                            id: `mid_reply_${Date.now()}_${Math.random()}`,
+                            id: result?.id || `mid_reply_${Date.now()}_${Math.random()}`,
                             conversation_id: conv.id,
                             user_id: user.id,
                             sender_id: user.business_account_id,

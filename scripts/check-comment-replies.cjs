@@ -59,6 +59,9 @@ async function comment(text, media='carousel', parent=null){
  rules=[rule('reply_all',{reply_mode:'both',message:'fallback',public_replies:['all']}),rule('keyword',{reply_mode:'dm_only',message:'keyword'})];
  await comment('자료');assert.equal(replies.length,0);assert.equal(dms[0][2],'keyword');
  replies=[];dms=[];await comment('random','carousel','parent');assert.equal(replies.length,0);assert.equal(dms.length,0);
+ replies=[];dms=[];rules=[rule('keyword',{reply_mode:'dm_only',message:'selected'},'selected-post')];
+ await comment('자료','other-post');assert.equal(dms.length,0);
+ await comment('자료','selected-post');assert.equal(dms.length,1);assert.equal(dms[0][2],'selected');
  rules=[rule('reply_all',{reply_mode:'dm_only',message:'secret',check_follow:true,buttons:[{type:'web_url',title:'자료',url:'https://example.com'}]})];
  for (const status of [false,null]) {followStatus=status;cards=[];buttonMessages=[];dms=[];await comment('any');assert.equal(cards.length,1);assert.equal(buttonMessages.length,0);assert.equal(dms.length,0)}
  followStatus=true;cards=[];await comment('any');assert.equal(cards.length,0);assert.equal(buttonMessages.length,1);assert.deepEqual(buttonMessages[0][1],{comment_id:'comment'});
