@@ -25,6 +25,13 @@ export function ChatWindow({ accountUsername, conversationId, recipientId, recip
     const [messages, setMessages] = useState<Message[]>([])
     const [loading, setLoading] = useState(false)
     const [inputText, setInputText] = useState("")
+    const composerRef = useRef<HTMLTextAreaElement>(null)
+    useEffect(() => {
+        const composer = composerRef.current
+        if (!composer) return
+        composer.style.height = "auto"
+        composer.style.height = `${Math.min(composer.scrollHeight, 144)}px`
+    }, [inputText, conversationId])
     const [sending, setSending] = useState(false)
     const [closing, setClosing] = useState(false)
     const [closeError, setCloseError] = useState("")
@@ -202,7 +209,7 @@ export function ChatWindow({ accountUsername, conversationId, recipientId, recip
                                             <p className="mt-1 text-muted-foreground">스토리가 만료되면 원본을 볼 수 없을 수 있습니다.</p>
                                         </div>
                                     ))}
-                                    {/^ACT::[a-zA-Z0-9_-]+$/.test(msg.content || "") ? "[자동화 버튼 클릭]" : msg.content}
+                                    <span className="whitespace-pre-wrap break-words">{/^ACT::[a-zA-Z0-9_-]+$/.test(msg.content || "") ? "[자동화 버튼 클릭]" : msg.content}</span>
                                     {msg.attachments?.filter(a => a.type !== "story_reply").map((attachment, index) => attachment.url && /^https:\/\//i.test(attachment.url) ? (
                                         <div key={index} className="mt-2">
                                             {attachment.type === "image" ? (
@@ -269,15 +276,18 @@ export function ChatWindow({ accountUsername, conversationId, recipientId, recip
                     >
                         <Zap className="w-5 h-5" />
                     </Button>
-                    <input
-                        className="flex-1 bg-muted px-3 py-2 text-sm text-foreground focus:outline-none placeholder:text-muted-foreground min-w-0"
+                    <textarea
+                        ref={composerRef}
+                        rows={1}
+                        aria-label="메시지 입력 (Enter 전송, Shift+Enter 줄바꿈)"
+                        className="resize-none max-h-36 overflow-y-auto flex-1 bg-muted px-3 py-2 text-sm text-foreground focus:outline-none placeholder:text-muted-foreground min-w-0"
                         placeholder="Type a message..."
                         value={inputText}
                         onChange={(e) => setInputText(e.target.value)}
                         onKeyDown={(e) => {
-                            if (e.key === 'Enter' && !sending) {
+                            if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && e.nativeEvent.keyCode !== 229) {
                                 e.preventDefault()
-                                handleSendMessage()
+                                if (!sending && !e.repeat) handleSendMessage()
                             }
                         }}
                         disabled={sending}
