@@ -42,7 +42,7 @@ export function QuickAutomationForm({ userId, initialSource, onSuccess }: {
   const [publicReplies, setPublicReplies] = useState("")
   const [buttons, setButtons] = useState<{ title: string; url: string }[]>([])
   const [checkFollow, setCheckFollow] = useState(false)
-  const [followGate, setFollowGate] = useState({ title: "팔로우하고 자료를 받아보세요 💌", subtitle: "팔로우 후 아래 확인 버튼을 눌러주세요.", follow_button: "팔로우하러 가기", confirm_button: "팔로우 했어요 ✅" })
+  const [followGate, setFollowGate] = useState({ message: "자료를 받으려면 먼저 팔로우해주세요 💌\n팔로우 후 아래 버튼을 눌러주세요.", not_following_message: "아직 팔로우가 확인되지 않았어요. 팔로우 후 위 버튼을 다시 눌러주세요.", confirm_button: "팔로우 했어요 ✅" })
   const hasDM = !(source === "comment" && replyMode === "public_only")
   const buttonsValid = buttons.every(button => button.title.trim() && /^https:\/\//i.test(button.url.trim()))
   const variants = publicReplies.split("\n").map(value => value.trim()).filter(Boolean)
@@ -50,6 +50,7 @@ export function QuickAutomationForm({ userId, initialSource, onSuccess }: {
   const valid = (!comment || mediaScope === "all" || !!selectedMedia) && (comment && allComments || !!keyword.trim()) &&
     (comment && replyMode === "public_only" || !!answer.trim()) &&
     (!comment || replyMode === "dm_only" || variants.length > 0) &&
+    (!hasDM || !checkFollow || !!followGate.message.trim() && !!followGate.not_following_message.trim() && !!followGate.confirm_button.trim()) &&
     (!hasDM || buttonsValid && (buttons.length === 0 || answer.length <= 640))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
@@ -132,7 +133,15 @@ export function QuickAutomationForm({ userId, initialSource, onSuccess }: {
         <input required={!(comment && allComments)} disabled={comment && allComments} value={keyword} onChange={event => setKeyword(event.target.value)} placeholder={comment && allComments ? "어떤 댓글이든 반응합니다" : "예: 자동화, 자료"} className="mt-2 w-full rounded-sm bg-card py-1 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" />
       </label>
       {hasDM && <section className="p-4 space-y-3" aria-label="DM 메시지와 링크 버튼">
-        <label className="block"><span className="text-xs font-medium text-muted-foreground">Send this DM</span>
+        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={checkFollow} onChange={event => setCheckFollow(event.target.checked)} />팔로우 확인 후 자료 보내기</label>
+        {checkFollow && <div className="rounded-lg border border-border p-3 space-y-3">
+          <p className="text-sm font-medium">1. 첫 안내 DM</p>
+          <p className="text-xs text-muted-foreground">팔로워도 먼저 이 DM을 받아요. 아래 버튼을 누른 뒤 팔로우를 확인합니다.</p>
+          <label className="block text-xs">안내 메시지<textarea required maxLength={640} rows={5} value={followGate.message} onChange={event => setFollowGate(previous => ({ ...previous, message: event.target.value }))} className={field + " mt-1"} /></label>
+          <label className="block text-xs">팔로우 확인 버튼 이름<input required maxLength={20} value={followGate.confirm_button} onChange={event => setFollowGate(previous => ({ ...previous, confirm_button: event.target.value }))} className={field + " mt-1"} /></label>
+          <p className="text-xs text-muted-foreground">버튼 클릭 → 팔로우함: 자료 DM / 팔로우 안 함: 아래 미팔로우 안내</p>
+        </div>}
+        <label className="block"><span className="text-xs font-medium text-muted-foreground">{checkFollow ? "2. 팔로우 확인 성공 시 자료 DM" : "Send this DM"}</span>
           <textarea required maxLength={buttons.length ? 640 : 1000} rows={4} value={answer} onChange={event => setAnswer(event.target.value)} placeholder="요청하신 자료를 보내드려요 💌" className="mt-2 w-full resize-y rounded-lg border border-border bg-background p-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" />
         </label>
         <p className="text-sm font-medium">메시지 아래 링크 버튼 (최대 3개)</p>
@@ -143,15 +152,13 @@ export function QuickAutomationForm({ userId, initialSource, onSuccess }: {
         </div>)}
         {buttons.length < 3 && <button type="button" onClick={() => setButtons(previous => [...previous, { title: "", url: "" }])} className="text-sm underline">+ 버튼 추가</button>}
         {buttons.length > 0 && <p className="text-xs text-muted-foreground">버튼이 있는 메시지는 640자까지 입력할 수 있어요.</p>}
-        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={checkFollow} onChange={event => setCheckFollow(event.target.checked)} />팔로우한 사람에게만 자료 보내기</label>
+
         {checkFollow && <div className="rounded-lg border border-border p-3 space-y-3">
-          <p className="text-sm font-medium">미팔로워에게 먼저 보낼 안내</p>
-          <p className="text-xs text-muted-foreground">이미 팔로우한 사람은 위 자료 DM을 바로 받아요. 미팔로워는 아래 안내를 받고, 확인 버튼을 눌렀을 때 팔로우가 확인되면 위 자료 DM을 받아요. 확인할 수 없으면 자료를 보내지 않아요.</p>
-          <label className="block text-xs">안내 제목 (최대 80자)<input required maxLength={80} value={followGate.title} onChange={event => setFollowGate(previous => ({ ...previous, title: event.target.value }))} className={field + " mt-1"} /></label>
-          <label className="block text-xs">안내 내용 (최대 80자)<textarea required maxLength={80} rows={3} value={followGate.subtitle} onChange={event => setFollowGate(previous => ({ ...previous, subtitle: event.target.value }))} className={field + " mt-1"} /></label>
-          <label className="block text-xs">프로필로 이동하는 버튼<input required maxLength={20} value={followGate.follow_button} onChange={event => setFollowGate(previous => ({ ...previous, follow_button: event.target.value }))} className={field + " mt-1"} /></label>
-          <label className="block text-xs">팔로우를 다시 확인하는 버튼<input required maxLength={20} value={followGate.confirm_button} onChange={event => setFollowGate(previous => ({ ...previous, confirm_button: event.target.value }))} className={field + " mt-1"} /></label>
+          <p className="text-sm font-medium">3. 미팔로우 시 안내 DM</p>
+          <label className="block text-xs">안내 메시지<textarea required maxLength={1000} rows={3} value={followGate.not_following_message} onChange={event => setFollowGate(previous => ({ ...previous, not_following_message: event.target.value }))} className={field + " mt-1"} /></label>
+          <p className="text-xs text-muted-foreground">자료는 보내지 않아요. 팔로우한 뒤 첫 DM의 확인 버튼을 다시 누르면 다시 확인합니다. 확인 오류 시에도 자료는 보내지 않아요.</p>
         </div>}
+
       </section>}
       </div>
       {comment && replyMode !== "dm_only" && <label className="block border-t border-border p-4">

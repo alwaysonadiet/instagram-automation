@@ -32,7 +32,7 @@ export interface ResponseContent {
   }
   media?: MediaResponse
   quick_replies?: { title: string; payload?: string }[]
-  follow_gate?: { title?: string; subtitle?: string; follow_button?: string; confirm_button?: string }
+  follow_gate?: { message?: string; not_following_message?: string; title?: string; subtitle?: string; follow_button?: string; confirm_button?: string }
   check_follow?: boolean
   // Comment automation options
   reply_mode?: "both" | "dm_only" | "public_only"

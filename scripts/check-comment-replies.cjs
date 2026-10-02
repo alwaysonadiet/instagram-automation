@@ -25,7 +25,7 @@ const mocks = {
  '@/lib/supabase-server':{getSupabaseServerClient:async()=>({from:query})},
  '@/lib/supabase-migrate':{ensureSchema:async()=>{}},
  '@/lib/instagram-api':new Proxy({}, {get:(_target,name)=>async(...args)=>{if(name==='replyToComment') replies.push(args); if(name==='sendTextDM') dms.push(args); if(name==='sendCardDM') cards.push(args); if(name==='sendButtonDM') buttonMessages.push(args);return {ok:true}}}),
- '@/lib/ai-reply':{}, '@/lib/unlock-tracking':{}
+ '@/lib/ai-reply':{}, '@/lib/unlock-tracking':{unlockKey:()=> 'key',clearUnlockAttempts:async()=>{},bumpUnlockAttempt:async()=>1}
 };
 const source=fs.readFileSync(path+'/app/api/instagram/webhook/route.ts','utf8');
 const compiled=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,esModuleInterop:true,target:ts.ScriptTarget.ES2022}}).outputText;
@@ -65,5 +65,22 @@ async function comment(text, media='carousel', parent=null){
  rules=[rule('reply_all',{reply_mode:'dm_only',message:'secret',check_follow:true,buttons:[{type:'web_url',title:'자료',url:'https://example.com'}]})];
  for (const status of [false,null]) {followStatus=status;cards=[];buttonMessages=[];dms=[];await comment('any');assert.equal(cards.length,1);assert.equal(buttonMessages.length,0);assert.equal(dms.length,0)}
  followStatus=true;cards=[];await comment('any');assert.equal(cards.length,0);assert.equal(buttonMessages.length,1);assert.deepEqual(buttonMessages[0][1],{comment_id:'comment'});
- console.log('PASS: reel/carousel comment handling, reply variants, all comments, modes, keyword precedence and nested reply protection');
+ const gate={message:'먼저 팔로우해주세요',confirm_button:'팔로우 했어요',not_following_message:'팔로우 후 다시 눌러주세요'};
+ rules=[{...rule('reply_all',{reply_mode:'dm_only',message:'secret',check_follow:true,follow_gate:gate}),id:'gated'}];
+ for(const status of [true,false,null]) {
+  followStatus=status;cards=[];buttonMessages=[];dms=[];await comment('any');
+  assert.equal(cards.length,0);assert.equal(dms.length,0);assert.equal(buttonMessages.length,1);
+  assert.equal(buttonMessages[0][2],gate.message);assert.equal(buttonMessages[0][3][0].payload,'UNLOCK_CONTENT_gated');
+ }
+ async function unlock(){
+  const raw=JSON.stringify({entry:[{id:'business',messaging:[{sender:{id:'sender'},recipient:{id:'business'},postback:{payload:'UNLOCK_CONTENT_gated',title:gate.confirm_button}}]}]});
+  const sig='sha256='+crypto.createHmac('sha256','test-secret').update(raw).digest('hex');
+  return mod.exports.POST({text:async()=>raw,headers:{get:()=>sig}});
+ }
+ followStatus=false;dms=[];await unlock();assert.equal(dms.length,1);assert.equal(dms[0][2],gate.not_following_message);
+ followStatus=null;dms=[];await unlock();assert.equal(dms.length,1);assert.notEqual(dms[0][2],'secret');
+ followStatus=true;dms=[];await unlock();assert.equal(dms.length,1);assert.equal(dms[0][2],'secret');
+ rules=[{...rules[0],trigger_source:'dm',trigger_type:'keyword',trigger_value:'자료'}];
+ followStatus=true;dms=[];buttonMessages=[];await post({text:'자료'});assert.equal(dms.length,0);assert.equal(buttonMessages.length,1);assert.equal(buttonMessages[0][2],gate.message);
+ console.log('PASS: reel/carousel comment handling, reply variants, all comments, modes, keyword precedence and nested reply protection and prompt-first follower branches');
 })().catch(e=>{console.error(e);process.exitCode=1});
