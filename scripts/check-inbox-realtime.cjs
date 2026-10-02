@@ -174,6 +174,7 @@ async function checkConversationStatus() {
     maybeSingle: async () => ({ data: owned ? { id: 'own-conversation' } : null }),
   }
   const { DELETE } = load('app/api/inbox/conversations/route.ts', {
+    '@/lib/instagram-api': { fetchProfile: async () => null },
     'next/server': { NextResponse: { json: (data, options) => ({ data, status: options?.status || 200 }) } },
     '@/lib/instagram-auth': { getInstagramIdentity: async () => identity },
     '@/lib/supabase-server': { getSupabaseServerClient: async () => ({ from: () => query }) },

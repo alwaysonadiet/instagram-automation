@@ -1,15 +1,16 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Search, Loader2, UserCircle } from "lucide-react"
+import { Search, Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { RecipientAvatar } from "./RecipientAvatar"
 import type { Conversation } from "@/types/db"
 
 interface ConversationListProps {
     revision?: number
     userId: string
     selectedId: string | null
-    onSelect: (id: string, username: string, recipientId: string) => void
+    onSelect: (id: string, username: string, recipientId: string, displayName?: string | null, profilePic?: string | null) => void
 }
 
 export function ConversationList({ userId, selectedId, onSelect, revision = 0 }: ConversationListProps) {
@@ -68,7 +69,7 @@ export function ConversationList({ userId, selectedId, onSelect, revision = 0 }:
                     conversations.map((conv) => (
                         <div
                             key={conv.id}
-                            onClick={() => onSelect(conv.id, conv.recipient_username, conv.recipient_id.toString())}
+                            onClick={() => onSelect(conv.id, conv.recipient_username, conv.recipient_id.toString(), conv.recipient_display_name, conv.recipient_profile_pic)}
                             className={cn(
                                 "p-3 rounded-lg flex items-center gap-3 cursor-pointer transition-colors border border-transparent",
                                 selectedId === conv.id
@@ -76,23 +77,21 @@ export function ConversationList({ userId, selectedId, onSelect, revision = 0 }:
                                     : "hover:bg-accent hover:border-border"
                             )}
                         >
-                            <div className="w-12 h-12 rounded-full bg-muted border border-border flex items-center justify-center shrink-0">
-                                <UserCircle className="w-6 h-6 text-muted-foreground" />
-                            </div>
+                            <RecipientAvatar url={conv.recipient_profile_pic} name={conv.recipient_display_name || conv.recipient_username} className="w-12 h-12" />
                             <div className="flex-1 min-w-0 text-left">
                                 <div className="flex items-center justify-between mb-0.5">
                                     <span className={cn(
                                         "font-semibold text-sm truncate",
                                         selectedId === conv.id ? "text-accent-yellow-foreground dark:text-accent-yellow" : "text-foreground"
                                     )}>
-                                        {conv.recipient_username}
+                                        @{conv.recipient_username}
                                     </span>
                                     <span className="text-[10px] text-muted-foreground whitespace-nowrap">
                                         {new Date(conv.last_message_at).toLocaleDateString([], { month: 'short', day: 'numeric' })}
                                     </span>
                                 </div>
                                 <p className="text-xs text-muted-foreground truncate">
-                                    Open to view conversation
+                                    {conv.recipient_display_name || "대화 보기"}
                                 </p>
                             </div>
                         </div>

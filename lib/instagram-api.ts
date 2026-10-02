@@ -156,9 +156,9 @@ export async function replyToComment(token: string, commentId: string, message: 
   return post(`${commentId}/replies`, token, { message })
 }
 
-export async function fetchProfile(token: string, igUserId: string): Promise<{ username?: string; name?: string } | null> {
+export async function fetchProfile(token: string, igUserId: string): Promise<{ username?: string; name?: string; profile_pic?: string } | null> {
   try {
-    const res = await fetch(`${GRAPH}/${igUserId}?fields=username,name&access_token=${encodeURIComponent(token)}`, { signal: AbortSignal.timeout(5000) })
+    const res = await fetch(`${GRAPH}/${igUserId}?fields=username,name,profile_pic&access_token=${encodeURIComponent(token)}`, { signal: AbortSignal.timeout(5000), next: { revalidate: 86400 } })
     const json = await res.json()
     if (!res.ok || json.error) return null
     return json

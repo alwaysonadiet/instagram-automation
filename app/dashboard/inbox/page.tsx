@@ -15,14 +15,19 @@ export default function InboxPage() {
     const [selectedRecipientName, setSelectedRecipientName] = useState<string | null>(null)
     const [selectedRecipientId, setSelectedRecipientId] = useState<string | null>(null)
 
+    const [selectedDisplayName, setSelectedDisplayName] = useState<string | null>(null)
+    const [selectedProfilePic, setSelectedProfilePic] = useState<string | null>(null)
+
     const [localRevision, setLocalRevision] = useState(0)
 
     const realtime = useInboxRealtime(userId, selectedConversationId)
 
-    const handleSelect = (id: string, name: string, recipientId: string) => {
+    const handleSelect = (id: string, name: string, recipientId: string, displayName?: string | null, profilePic?: string | null) => {
         setSelectedConversationId(id)
         setSelectedRecipientName(name)
         setSelectedRecipientId(recipientId)
+        setSelectedDisplayName(displayName || null)
+        setSelectedProfilePic(profilePic || null)
     }
 
     if (isLoading) {
@@ -66,6 +71,8 @@ export default function InboxPage() {
                     onStatusChanged={() => { setSelectedConversationId(null); setLocalRevision(n => n + 1) }}
                     conversationId={selectedConversationId}
                     recipientName={selectedRecipientName}
+                    recipientDisplayName={selectedDisplayName}
+                    recipientProfilePic={selectedProfilePic}
                     recipientId={selectedRecipientId || undefined}
                     userId={userId}
                     onBack={() => setSelectedConversationId(null)}

@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { fetchProfile } from "@/lib/instagram-api"
 import { getInstagramIdentity } from "@/lib/instagram-auth"
 import { getSupabaseServerClient } from "@/lib/supabase-server"
 
@@ -6,6 +7,10 @@ export async function GET(request: NextRequest) {
     try {
         const userId = request.nextUrl.searchParams.get("userId")
         if (!userId) return NextResponse.json({ error: "Missing userId" }, { status: 400 })
+
+        const identity = await getInstagramIdentity()
+        if (!identity) return NextResponse.json({ error: "Please log in again" }, { status: 401 })
+        if (identity.userId !== userId) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
         const supabase = await getSupabaseServerClient()
 
@@ -20,7 +25,24 @@ export async function GET(request: NextRequest) {
 
         if (error) throw error
 
-        return NextResponse.json((conversations || []).map(({ messages, ...conversation }) => conversation))
+        const rows = (conversations || []).map(({ messages, ...conversation }) => conversation)
+        if (!rows.length) return NextResponse.json(rows)
+        const { data: user } = await supabase.from("users").select("access_token").eq("id", identity.userId).single()
+        if (!user?.access_token) return NextResponse.json(rows)
+        // Profile responses are cached for a day; no background polling or photo uploads.
+        const enriched = []
+        for (let offset = 0; offset < rows.length; offset += 8) {
+            enriched.push(...await Promise.all(rows.slice(offset, offset + 8).map(async conversation => {
+                const profile = await fetchProfile(user.access_token, String(conversation.recipient_id))
+                return {
+                    ...conversation,
+                    recipient_username: profile?.username || conversation.recipient_username,
+                    recipient_display_name: profile?.name || null,
+                    recipient_profile_pic: profile?.profile_pic?.startsWith("https://") ? profile.profile_pic : null,
+                }
+            })))
+        }
+        return NextResponse.json(enriched)
     } catch (error) {
         console.error("[Inbox] Conversations GET error:", error)
         return NextResponse.json({ error: "Failed to fetch conversations" }, { status: 500 })

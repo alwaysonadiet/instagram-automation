@@ -3,6 +3,8 @@ export interface Conversation {
     user_id: string
     recipient_id: string
     recipient_username: string
+    recipient_display_name?: string | null
+    recipient_profile_pic?: string | null
     last_message_at: string
     created_at: string
     updated_at: string

@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from "react"
 import { Send, Loader2, MoreVertical, Phone, Video, Zap, ChevronLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import { RecipientAvatar } from "./RecipientAvatar"
 import type { Message } from "@/types/db"
 
 interface ChatWindowProps {
@@ -11,12 +12,14 @@ interface ChatWindowProps {
     revision?: number
     conversationId: string | null
     recipientId?: string
+    recipientDisplayName?: string | null
+    recipientProfilePic?: string | null
     recipientName: string | null
     userId: string
     onBack?: () => void
 }
 
-export function ChatWindow({ conversationId, recipientId, recipientName, userId, onBack, revision = 0, onStatusChanged }: ChatWindowProps) {
+export function ChatWindow({ conversationId, recipientId, recipientName, recipientDisplayName, recipientProfilePic, userId, onBack, revision = 0, onStatusChanged }: ChatWindowProps) {
     const [messages, setMessages] = useState<Message[]>([])
     const [loading, setLoading] = useState(false)
     const [inputText, setInputText] = useState("")
@@ -141,9 +144,10 @@ export function ChatWindow({ conversationId, recipientId, recipientName, userId,
                             <ChevronLeft className="w-6 h-6" />
                         </Button>
                     )}
-                    <div className="w-8 h-8 rounded-full bg-muted border border-border shrink-0" />
+                    <RecipientAvatar url={recipientProfilePic} name={recipientDisplayName || recipientName} className="w-10 h-10" />
                     <div className="min-w-0">
                         <h3 className="font-bold text-foreground text-sm truncate">@{recipientName}</h3>
+                        {recipientDisplayName && <p className="text-xs text-muted-foreground truncate">{recipientDisplayName}</p>}
 
                     </div>
                 </div>
