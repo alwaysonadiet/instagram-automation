@@ -267,13 +267,17 @@ export async function POST(request: NextRequest) {
         continue
       }
 
-      const { data: automations } = await supabase
+      const { data: activeAutomations, error: automationsError } = await supabase
         .from("automations")
         .select("*")
         .eq("user_id", user.id)
         .eq("is_active", true)
 
-      if (!automations?.length) continue
+      if (automationsError) {
+        console.error("[webhook] Failed to load automations:", automationsError.message)
+      }
+      // Inbox receipt must work even before the first automation is created.
+      const automations = activeAutomations ?? []
 
       // ============================================================
       //  PART A: COMMENTS
@@ -564,15 +568,16 @@ export async function POST(request: NextRequest) {
             }
 
             if (conv) {
-              await supabase.from("messages").insert({
+              const { error: messageError } = await supabase.from("messages").insert({
                 id: event.message?.mid || `mid_${Date.now()}_${Math.random()}`,
                 conversation_id: conv.id,
                 user_id: user.id,
                 sender_id: senderId,
                 sender_username: "User",
-                content: triggerValue,
+                content: event.message?.text ?? triggerValue,
                 is_from_instagram: true,
               })
+              if (messageError) throw messageError
             }
           } catch (err) {
             console.error("[webhook] Failed to save incoming message", err)
