@@ -80,6 +80,9 @@ function keywordMatches(triggerValue: string, text: string): boolean {
     .map((k: string) => k.trim())
     .filter(Boolean)
     .some((k: string) => {
+      // JavaScript word boundaries only recognise ASCII word characters.
+      // Korean keywords must also match natural replies such as "자료 주세요".
+      if (/[^\x00-\x7F]/.test(k)) return text.toLowerCase().includes(k.toLowerCase())
       try {
         return new RegExp(`\\b${k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(text)
       } catch {
@@ -315,6 +318,10 @@ export async function POST(request: NextRequest) {
                 a.trigger_type === "keyword" &&
                 keywordMatches(a.trigger_value, commentText),
             )
+          }
+          // Global reply-all is a fallback so keyword rules still take precedence.
+          if (!match) {
+            match = commentAutomations.find((a: any) => !a.specific_media_id && a.trigger_type === "reply_all")
           }
           if (!match) continue
 
