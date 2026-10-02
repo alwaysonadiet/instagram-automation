@@ -85,7 +85,7 @@ export function ConversationList({ userId, selectedId, onSelect, revision = 0 }:
                                         selectedId === conv.id ? "text-accent-yellow-foreground dark:text-accent-yellow" : "text-foreground"
                                     )}>
                                         {/^[A-Za-z0-9._]+$/.test(conv.recipient_username) ? (
-                                            <a href={`https://www.instagram.com/${encodeURIComponent(conv.recipient_username)}/`} target="_blank" rel="noopener noreferrer" onClick={event => event.stopPropagation()} className="hover:underline" aria-label={`@${conv.recipient_username} 인스타 프로필 열기`}>@{conv.recipient_username}</a>
+                                            <a href={`https://ig.me/m/${encodeURIComponent(conv.recipient_username)}`} target="_blank" rel="noopener noreferrer" onClick={event => event.stopPropagation()} className="hover:underline" aria-label={`@${conv.recipient_username} 인스타 DM 열기`} title="대화를 나눈 인스타 계정으로 전환한 후 열어주세요">@{conv.recipient_username}</a>
                                         ) : <>@{conv.recipient_username}</>}
                                     </span>
                                     <span className="text-[10px] text-muted-foreground whitespace-nowrap">

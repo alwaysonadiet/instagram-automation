@@ -138,7 +138,7 @@ export function ChatWindow({ conversationId, recipientId, recipientName, recipie
     return (
         <div className="flex-1 min-h-0 min-w-0 flex flex-col h-full bg-card relative">
             {/* Header */}
-            <div className="h-16 border-b border-border flex items-center justify-between px-4 md:px-6 bg-card shrink-0">
+            <div className="min-h-16 border-b border-border flex items-center justify-between gap-2 px-3 py-2 md:px-6 bg-card shrink-0">
                 <div className="flex items-center gap-2 min-w-0 flex-1">
                     {onBack && (
                         <Button variant="ghost" size="icon" onClick={onBack} className="md:hidden -ml-2 text-muted-foreground">
@@ -149,7 +149,7 @@ export function ChatWindow({ conversationId, recipientId, recipientName, recipie
                     <div className="min-w-0">
                         <h3 className="font-bold text-foreground text-sm truncate">
                             {recipientName && /^[A-Za-z0-9._]+$/.test(recipientName) ? (
-                                <a href={`https://www.instagram.com/${encodeURIComponent(recipientName)}/`} target="_blank" rel="noopener noreferrer" className="hover:underline" aria-label={`@${recipientName} 인스타 프로필 열기`}>@{recipientName}</a>
+                                <a href={`https://ig.me/m/${encodeURIComponent(recipientName)}`} target="_blank" rel="noopener noreferrer" className="hover:underline" aria-label={`@${recipientName} 인스타 DM 열기`} title="대화를 나눈 인스타 계정으로 전환한 후 열어주세요">@{recipientName}</a>
                             ) : <>@{recipientName}</>}
                         </h3>
                         {recipientDisplayName && <p className="text-xs text-muted-foreground truncate">{recipientDisplayName}</p>}
@@ -160,7 +160,13 @@ export function ChatWindow({ conversationId, recipientId, recipientName, recipie
                     <Button variant="outline" size="sm" disabled={closing} onClick={changeStatus} title="이 앱의 대화 기록을 삭제합니다. 인스타 원본은 유지됩니다.">{closing ? "처리 중…" : "닫기 · 기록 삭제"}</Button>
                     <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground hidden md:flex" aria-label="Call"><Phone className="w-4 h-4" /></Button>
                     <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground hidden md:flex" aria-label="Video"><Video className="w-4 h-4" /></Button>
-                    <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground" aria-label="More"><MoreVertical className="w-4 h-4" /></Button>
+                    {recipientName && /^[A-Za-z0-9._]+$/.test(recipientName) && (
+                        <Button variant="ghost" size="icon" asChild>
+                            <a href={`https://www.instagram.com/${encodeURIComponent(recipientName)}/`} target="_blank" rel="noopener noreferrer" aria-label="인스타 프로필 보기" title="인스타 프로필 보기">
+                                <MoreVertical className="w-4 h-4" />
+                            </a>
+                        </Button>
+                    )}
                 </div>
             </div>
 
