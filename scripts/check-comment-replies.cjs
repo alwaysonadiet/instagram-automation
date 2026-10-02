@@ -4,6 +4,8 @@ const ts = require(path + '/node_modules/typescript');
 const crypto = require('crypto');
 const assert = require('assert/strict');
 process.env.INSTAGRAM_APP_SECRET = 'test-secret';
+let followStatus = true; let cards = []; let buttonMessages = [];
+global.fetch = async () => ({ok: followStatus !== null, status: followStatus === null ? 503 : 200, text: async () => "unavailable", json: async () => ({is_user_follow_business: followStatus})});
 let saved = []; let sent = 0; let reopened = false; let rules = []; let replies = []; let dms = [];
 const user = {id:'owner',business_account_id:'business',page_id:'business',access_token:'fake',username:'owner'};
 function query(table) {
@@ -22,7 +24,7 @@ const mocks = {
  'next/server':{NextResponse:{json:(data,opts)=>({data,status:opts?.status||200})}},
  '@/lib/supabase-server':{getSupabaseServerClient:async()=>({from:query})},
  '@/lib/supabase-migrate':{ensureSchema:async()=>{}},
- '@/lib/instagram-api':new Proxy({}, {get:(_target,name)=>async(...args)=>{if(name==='replyToComment') replies.push(args); if(name==='sendTextDM') dms.push(args);return {ok:true}}}),
+ '@/lib/instagram-api':new Proxy({}, {get:(_target,name)=>async(...args)=>{if(name==='replyToComment') replies.push(args); if(name==='sendTextDM') dms.push(args); if(name==='sendCardDM') cards.push(args); if(name==='sendButtonDM') buttonMessages.push(args);return {ok:true}}}),
  '@/lib/ai-reply':{}, '@/lib/unlock-tracking':{}
 };
 const source=fs.readFileSync(path+'/app/api/instagram/webhook/route.ts','utf8');
@@ -57,5 +59,8 @@ async function comment(text, media='carousel', parent=null){
  rules=[rule('reply_all',{reply_mode:'both',message:'fallback',public_replies:['all']}),rule('keyword',{reply_mode:'dm_only',message:'keyword'})];
  await comment('자료');assert.equal(replies.length,0);assert.equal(dms[0][2],'keyword');
  replies=[];dms=[];await comment('random','carousel','parent');assert.equal(replies.length,0);assert.equal(dms.length,0);
+ rules=[rule('reply_all',{reply_mode:'dm_only',message:'secret',check_follow:true,buttons:[{type:'web_url',title:'자료',url:'https://example.com'}]})];
+ for (const status of [false,null]) {followStatus=status;cards=[];buttonMessages=[];dms=[];await comment('any');assert.equal(cards.length,1);assert.equal(buttonMessages.length,0);assert.equal(dms.length,0)}
+ followStatus=true;cards=[];await comment('any');assert.equal(cards.length,0);assert.equal(buttonMessages.length,1);assert.deepEqual(buttonMessages[0][1],{comment_id:'comment'});
  console.log('PASS: reel/carousel comment handling, reply variants, all comments, modes, keyword precedence and nested reply protection');
 })().catch(e=>{console.error(e);process.exitCode=1});

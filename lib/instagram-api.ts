@@ -78,11 +78,11 @@ export function buildFollowGateCard(params: {
   subtitle?: string
 }): IGCard {
   return {
-    title: params.title ?? "Before you lose me",
-    subtitle: params.subtitle ?? `Follow @${params.username} to unlock this content!`,
+    title: params.title ?? "팔로우하고 자료를 받아보세요 💌",
+    subtitle: params.subtitle ?? `@${params.username} 팔로우 후 아래 버튼을 눌러주세요.`,
     buttons: [
-      { type: "web_url", url: `https://instagram.com/${params.username}`, title: "Follow" },
-      { type: "postback", title: "I Followed! ✅", payload: `UNLOCK_CONTENT_${params.ruleId}` },
+      { type: "web_url", url: `https://instagram.com/${params.username}`, title: "팔로우하러 가기" },
+      { type: "postback", title: "팔로우 했어요 ✅", payload: `UNLOCK_CONTENT_${params.ruleId}` },
     ],
   }
 }
@@ -102,6 +102,13 @@ export async function sendTextDM(
     }))
   }
   return post("me/messages", token, { recipient, message })
+}
+
+export async function sendButtonDM(token: string, recipient: { id?: string; comment_id?: string }, text: string, buttons: IGButton[]): Promise<SendResult> {
+  if (!text || text.length > 640 || buttons.length < 1 || buttons.length > 3 || buttons.some(button => !button.title || button.title.length > 20 || button.type === "web_url" && !/^https:\/\//i.test(button.url || ""))) {
+    return { ok: false, error: "Invalid button message" }
+  }
+  return post("me/messages", token, { recipient, message: { attachment: { type: "template", payload: { template_type: "button", text, buttons } } } })
 }
 
 export async function sendCardDM(

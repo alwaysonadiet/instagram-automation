@@ -22,6 +22,7 @@ export interface MediaResponse {
 
 // The JSON stored in automations.response_content
 export interface ResponseContent {
+  buttons?: Omit<ProButton, "id">[]
   message?: string
   card?: {
     title: string

@@ -113,6 +113,7 @@ export function LandingPage() {
                 Connect Instagram
                 <ArrowUpRight className="w-4 h-4 group-hover:rotate-45 transition-transform" />
               </button>
+              <p className="w-full text-xs text-neutral-400">모바일은 이 사이트를 Safari 또는 Chrome에서 직접 열어 로그인해주세요. 인스타 앱으로 넘어가면 브라우저로 돌아와 같은 창에서 다시 연결해주세요.</p>
               {process.env.NODE_ENV === "development" && (
                 <button
                   onClick={handleTestLogin}

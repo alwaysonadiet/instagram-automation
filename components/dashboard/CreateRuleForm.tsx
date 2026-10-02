@@ -211,6 +211,7 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
 
     if (type === "text") {
       content.message = messageText
+      if (editRule?.response_content?.buttons) content.buttons = editRule.response_content.buttons
     } else if (type === "media") {
       content.media = { type: mediaType, url: mediaUrl.trim() }
       if (messageText.trim()) content.message = messageText

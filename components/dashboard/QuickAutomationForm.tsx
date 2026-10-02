@@ -15,13 +15,18 @@ export function QuickAutomationForm({ userId, initialSource, onSuccess }: {
   const [keyword, setKeyword] = useState("")
   const [answer, setAnswer] = useState("")
   const [allComments, setAllComments] = useState(false)
-  const [replyMode, setReplyMode] = useState<"dm_only" | "public_only" | "both">("dm_only")
+  const [replyMode, setReplyMode] = useState<"dm_only" | "public_only" | "both">("both")
   const [publicReplies, setPublicReplies] = useState("")
+  const [buttons, setButtons] = useState<{ title: string; url: string }[]>([])
+  const [checkFollow, setCheckFollow] = useState(false)
+  const hasDM = !(source === "comment" && replyMode === "public_only")
+  const buttonsValid = buttons.every(button => button.title.trim() && /^https:\/\//i.test(button.url.trim()))
   const variants = publicReplies.split("\n").map(value => value.trim()).filter(Boolean)
   const comment = source === "comment"
   const valid = (comment && allComments || !!keyword.trim()) &&
     (comment && replyMode === "public_only" || !!answer.trim()) &&
-    (!comment || replyMode === "dm_only" || variants.length > 0)
+    (!comment || replyMode === "dm_only" || variants.length > 0) &&
+    (!hasDM || buttonsValid && (buttons.length === 0 || answer.length <= 640))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
   const submitting = useRef(false)
@@ -43,7 +48,7 @@ export function QuickAutomationForm({ userId, initialSource, onSuccess }: {
           trigger_source: source,
           trigger_type: comment && allComments ? "reply_all" : source === "story" ? "reply" : "keyword",
           trigger_value: comment && allComments ? "ALL_COMMENTS" : keyword.trim(),
-          content: { message: comment && replyMode === "public_only" ? "" : answer.trim(), ...(comment ? { reply_mode: replyMode, public_replies: variants } : {}) },
+          content: { ...(hasDM ? { check_follow: checkFollow, buttons: buttons.map(button => ({ type: "web_url", title: button.title.trim(), url: button.url.trim() })) } : {}), message: comment && replyMode === "public_only" ? "" : answer.trim(), ...(comment ? { reply_mode: replyMode, public_replies: variants } : {}) },
           specific_media_id: null,
         }),
       })
@@ -51,6 +56,8 @@ export function QuickAutomationForm({ userId, initialSource, onSuccess }: {
       setKeyword("")
       setAnswer("")
       setPublicReplies("")
+      setButtons([])
+      setCheckFollow(false)
       onSuccess(source)
     } catch {
       setError("Could not save. Check your connection and try again.")
@@ -80,9 +87,21 @@ export function QuickAutomationForm({ userId, initialSource, onSuccess }: {
         <input required={!(comment && allComments)} disabled={comment && allComments} value={keyword} onChange={event => setKeyword(event.target.value)} placeholder={comment && allComments ? "어떤 댓글이든 반응합니다" : "예: 자동화, 자료"} className="mt-2 w-full rounded-sm bg-card py-1 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" />
       </label>
       {!(comment && replyMode === "public_only") && <label className="block p-4"><span className="text-xs font-medium text-muted-foreground">Send this reply</span>
-        <textarea required maxLength={1000} rows={3} value={answer} onChange={event => setAnswer(event.target.value)} placeholder="Our plans start at ₹499. Here’s the link…" className="mt-2 w-full resize-y rounded-sm bg-card py-1 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+        <textarea required maxLength={buttons.length ? 640 : 1000} rows={3} value={answer} onChange={event => setAnswer(event.target.value)} placeholder="요청하신 자료를 보내드려요 💌" className="mt-2 w-full resize-y rounded-sm bg-card py-1 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" />
       </label>}
       </div>
+      {hasDM && <div className="border-t border-border p-4 space-y-3">
+        <p className="text-sm font-medium">메시지 아래 링크 버튼 (최대 3개)</p>
+        {buttons.map((button, index) => <div key={index} className="flex flex-wrap gap-2">
+          <input aria-label={`버튼 ${index + 1} 이름`} required maxLength={20} value={button.title} placeholder="버튼 이름" className={field + " sm:w-40"} onChange={event => setButtons(previous => previous.map((value, i) => i === index ? { ...value, title: event.target.value } : value))} />
+          <input aria-label={`버튼 ${index + 1} 링크`} required type="url" pattern="https://.*" value={button.url} placeholder="https://…" className={field + " sm:flex-1"} onChange={event => setButtons(previous => previous.map((value, i) => i === index ? { ...value, url: event.target.value } : value))} />
+          <button type="button" onClick={() => setButtons(previous => previous.filter((_, i) => i !== index))} className="text-sm underline">삭제</button>
+        </div>)}
+        {buttons.length < 3 && <button type="button" onClick={() => setButtons(previous => [...previous, { title: "", url: "" }])} className="text-sm underline">+ 버튼 추가</button>}
+        {buttons.length > 0 && <p className="text-xs text-muted-foreground">버튼이 있는 메시지는 640자까지 입력할 수 있어요.</p>}
+        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={checkFollow} onChange={event => setCheckFollow(event.target.checked)} />팔로우한 사람에게만 자료 보내기</label>
+        {checkFollow && <p className="text-xs text-muted-foreground">미팔로워에게는 ‘팔로우 했어요’ 버튼을 먼저 보내요. 버튼을 누르면 다시 확인하고, 팔로우가 확인된 경우에만 위 메시지를 보내요.</p>}
+      </div>}
       {comment && replyMode !== "dm_only" && <label className="block border-t border-border p-4">
         <span className="text-sm font-medium">대댓글 문구 여러 개</span>
         <p className="mt-1 text-xs text-muted-foreground">한 줄에 문구 하나씩 적어주세요. 같은 키워드에도 매번 목록에서 하나를 무작위로 골라 답장합니다.</p>
