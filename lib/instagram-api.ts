@@ -74,15 +74,16 @@ export function buildCardAttachment(card: IGCard) {
 export function buildFollowGateCard(params: {
   username: string
   ruleId: string
+  gate?: { title?: string; subtitle?: string; follow_button?: string; confirm_button?: string }
   title?: string
   subtitle?: string
 }): IGCard {
   return {
-    title: params.title ?? "팔로우하고 자료를 받아보세요 💌",
-    subtitle: params.subtitle ?? `@${params.username} 팔로우 후 아래 버튼을 눌러주세요.`,
+    title: params.title ?? (params.gate?.title?.trim().slice(0,80) || "팔로우하고 자료를 받아보세요 💌"),
+    subtitle: params.subtitle ?? (params.gate?.subtitle?.trim().slice(0,80) || `@${params.username} 팔로우 후 아래 버튼을 눌러주세요.`),
     buttons: [
-      { type: "web_url", url: `https://instagram.com/${params.username}`, title: "팔로우하러 가기" },
-      { type: "postback", title: "팔로우 했어요 ✅", payload: `UNLOCK_CONTENT_${params.ruleId}` },
+      { type: "web_url", url: `https://instagram.com/${params.username}`, title: params.gate?.follow_button?.trim().slice(0,20) || "팔로우하러 가기" },
+      { type: "postback", title: params.gate?.confirm_button?.trim().slice(0,20) || "팔로우 했어요 ✅", payload: `UNLOCK_CONTENT_${params.ruleId}` },
     ],
   }
 }
