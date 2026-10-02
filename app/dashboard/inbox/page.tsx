@@ -43,7 +43,7 @@ export default function InboxPage() {
     }
 
     return (
-        <div className="h-[calc(100vh-3rem)] m-6 rounded-xl overflow-hidden border border-border bg-card flex relative">
+        <div className="h-[calc(100%-1rem)] m-2 md:h-[calc(100%-3rem)] md:m-6 rounded-xl overflow-hidden border border-border bg-card flex relative">
             {/* Left Sidebar: Conversation List */}
             <div className={cn(
                 "w-full md:w-[360px] flex-shrink-0 border-r border-border bg-card flex flex-col absolute md:static inset-0 z-10 transition-transform duration-200 md:translate-x-0 h-full",
@@ -63,7 +63,7 @@ export default function InboxPage() {
 
             {/* Right Main: Chat Window */}
             <div className={cn(
-                "flex-1 w-full absolute md:static inset-0 z-20 bg-card transition-transform duration-200 md:translate-x-0 h-full",
+                "flex-1 min-w-0 min-h-0 w-full absolute md:static inset-0 z-20 bg-card transition-transform duration-200 md:translate-x-0 h-full",
                 selectedConversationId ? "translate-x-0" : "translate-x-full md:translate-x-0"
             )}>
                 <ChatWindow

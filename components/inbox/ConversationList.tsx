@@ -84,7 +84,9 @@ export function ConversationList({ userId, selectedId, onSelect, revision = 0 }:
                                         "font-semibold text-sm truncate",
                                         selectedId === conv.id ? "text-accent-yellow-foreground dark:text-accent-yellow" : "text-foreground"
                                     )}>
-                                        @{conv.recipient_username}
+                                        {/^[A-Za-z0-9._]+$/.test(conv.recipient_username) ? (
+                                            <a href={`https://www.instagram.com/${encodeURIComponent(conv.recipient_username)}/`} target="_blank" rel="noopener noreferrer" onClick={event => event.stopPropagation()} className="hover:underline" aria-label={`@${conv.recipient_username} 인스타 프로필 열기`}>@{conv.recipient_username}</a>
+                                        ) : <>@{conv.recipient_username}</>}
                                     </span>
                                     <span className="text-[10px] text-muted-foreground whitespace-nowrap">
                                         {new Date(conv.last_message_at).toLocaleDateString([], { month: 'short', day: 'numeric' })}

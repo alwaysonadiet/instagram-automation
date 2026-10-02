@@ -41,7 +41,7 @@ export function ChatWindow({ conversationId, recipientId, recipientName, recipie
     const activeConversation = useRef(conversationId)
     activeConversation.current = conversationId
     const loadedConversation = useRef<string | null>(null)
-    const bottomRef = useRef<HTMLDivElement>(null)
+    const messagesRef = useRef<HTMLDivElement>(null)
 
     useEffect(() => {
         if (!conversationId) return
@@ -80,7 +80,8 @@ export function ChatWindow({ conversationId, recipientId, recipientName, recipie
     }, [userId])
 
     useEffect(() => {
-        bottomRef.current?.scrollIntoView({ behavior: "smooth" })
+        const container = messagesRef.current
+        container?.scrollTo({ top: container.scrollHeight, behavior: "smooth" })
     }, [messages])
 
     const handleSendMessage = async (text: string = inputText) => {
@@ -135,10 +136,10 @@ export function ChatWindow({ conversationId, recipientId, recipientName, recipie
     }
 
     return (
-        <div className="flex-1 flex flex-col h-full bg-card relative">
+        <div className="flex-1 min-h-0 min-w-0 flex flex-col h-full bg-card relative">
             {/* Header */}
             <div className="h-16 border-b border-border flex items-center justify-between px-4 md:px-6 bg-card shrink-0">
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 min-w-0 flex-1">
                     {onBack && (
                         <Button variant="ghost" size="icon" onClick={onBack} className="md:hidden -ml-2 text-muted-foreground">
                             <ChevronLeft className="w-6 h-6" />
@@ -146,12 +147,16 @@ export function ChatWindow({ conversationId, recipientId, recipientName, recipie
                     )}
                     <RecipientAvatar url={recipientProfilePic} name={recipientDisplayName || recipientName} className="w-10 h-10" />
                     <div className="min-w-0">
-                        <h3 className="font-bold text-foreground text-sm truncate">@{recipientName}</h3>
+                        <h3 className="font-bold text-foreground text-sm truncate">
+                            {recipientName && /^[A-Za-z0-9._]+$/.test(recipientName) ? (
+                                <a href={`https://www.instagram.com/${encodeURIComponent(recipientName)}/`} target="_blank" rel="noopener noreferrer" className="hover:underline" aria-label={`@${recipientName} 인스타 프로필 열기`}>@{recipientName}</a>
+                            ) : <>@{recipientName}</>}
+                        </h3>
                         {recipientDisplayName && <p className="text-xs text-muted-foreground truncate">{recipientDisplayName}</p>}
 
                     </div>
                 </div>
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1 shrink-0">
                     <Button variant="outline" size="sm" disabled={closing} onClick={changeStatus} title="이 앱의 대화 기록을 삭제합니다. 인스타 원본은 유지됩니다.">{closing ? "처리 중…" : "닫기 · 기록 삭제"}</Button>
                     <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground hidden md:flex" aria-label="Call"><Phone className="w-4 h-4" /></Button>
                     <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground hidden md:flex" aria-label="Video"><Video className="w-4 h-4" /></Button>
@@ -161,7 +166,7 @@ export function ChatWindow({ conversationId, recipientId, recipientName, recipie
 
             {closeError && <p role="alert" className="px-4 py-2 text-sm text-destructive">{closeError}</p>}
             {/* Messages Area */}
-            <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4 md:space-y-6">
+            <div ref={messagesRef} className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 md:p-6 space-y-4 md:space-y-6">
                 {loading ? (
                     <div className="flex justify-center py-10">
                         <Loader2 className="w-8 h-8 text-muted-foreground animate-spin" />
@@ -216,7 +221,7 @@ export function ChatWindow({ conversationId, recipientId, recipientName, recipie
                         )
                     })
                 )}
-                <div ref={bottomRef} />
+
             </div>
 
             {/* Automation Popup */}
