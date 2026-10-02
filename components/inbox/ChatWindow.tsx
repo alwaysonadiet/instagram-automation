@@ -144,10 +144,7 @@ export function ChatWindow({ conversationId, recipientId, recipientName, userId,
                     <div className="w-8 h-8 rounded-full bg-muted border border-border shrink-0" />
                     <div className="min-w-0">
                         <h3 className="font-bold text-foreground text-sm truncate">@{recipientName}</h3>
-                        <span className="hidden md:flex items-center gap-1.5 text-[10px] text-success">
-                            <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
-                            Online via Instagram
-                        </span>
+
                     </div>
                 </div>
                 <div className="flex items-center gap-1">
