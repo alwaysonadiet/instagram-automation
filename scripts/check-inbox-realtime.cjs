@@ -206,7 +206,7 @@ async function checkReadStatus() {
  owned=true;assert.equal((await PATCH(req({conversationId:'c',isUnread:false}))).status,400);
  assert.equal((await PATCH(req({conversationId:'c',isUnread:true}))).status,200);assert.deepEqual(updates.pop(),{is_unread:true});
  assert.equal((await PATCH(req({conversationId:'c',isUnread:false,readThrough:'2026-10-03T01:00:00Z'}))).status,200);
- assert.deepEqual(updates.pop(),{is_unread:false});assert.match(readFilter,/last_incoming_at.lte.2026-10-03T01:00:00.000Z/);
+ assert.deepEqual(updates.pop(),{is_unread:false});assert.match(readFilter,/last_incoming_at.lte.2026-10-03T01:00:00Z/);
  assert.ok(filters.some(([k,v])=>k==='user_id'&&v==='owner'));
 }
 

@@ -70,7 +70,7 @@ export async function PATCH(request: NextRequest) {
     let body
     try { body = await request.json() } catch { return NextResponse.json({ error: "Invalid body" }, { status: 400 }) }
     if (typeof body.conversationId !== "string" || typeof body.isUnread !== "boolean" ||
-        (!body.isUnread && (typeof body.readThrough !== "string" || !Number.isFinite(Date.parse(body.readThrough))))) {
+        (!body.isUnread && (typeof body.readThrough !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/.test(body.readThrough) || !Number.isFinite(Date.parse(body.readThrough))))) {
         return NextResponse.json({ error: "Invalid read status" }, { status: 400 })
     }
     const supabase = await getSupabaseServerClient()
@@ -81,7 +81,7 @@ export async function PATCH(request: NextRequest) {
     let query = supabase.from("conversations").update({ is_unread: body.isUnread })
         .eq("id", body.conversationId).eq("user_id", identity.userId).eq("is_unread", !body.isUnread)
     // A message arriving after the displayed batch must stay unread.
-    if (!body.isUnread) query = query.or(`last_incoming_at.is.null,last_incoming_at.lte.${new Date(body.readThrough).toISOString()}`)
+    if (!body.isUnread) query = query.or(`last_incoming_at.is.null,last_incoming_at.lte.${body.readThrough}`)
     const { data, error } = await query.select("id")
     if (error) return NextResponse.json({ error: "Could not update read status" }, { status: 500 })
     return NextResponse.json({ success: true, changed: !!data?.length })
