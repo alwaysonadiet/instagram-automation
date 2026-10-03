@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { getInstagramIdentity } from "@/lib/instagram-auth"
 import { getSupabaseServerClient } from "@/lib/supabase-server"
 
 export async function POST(request: NextRequest) {
@@ -9,6 +10,10 @@ export async function POST(request: NextRequest) {
         if (!userId || !recipientId || (!message && !attachment)) {
             return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
         }
+
+        const identity = await getInstagramIdentity()
+        if (!identity) return NextResponse.json({ error: "Please log in again" }, { status: 401 })
+        if (identity.userId !== userId) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
         const supabase = await getSupabaseServerClient()
 
@@ -44,9 +49,9 @@ export async function POST(request: NextRequest) {
 
         const data = await res.json()
 
-        if (data.error) {
+        if (!res.ok || data.error) {
             console.error("[Inbox Send] Instagram API Error:", data.error)
-            return NextResponse.json({ error: data.error.message }, { status: 500 })
+            return NextResponse.json({ error: data.error?.message || "Instagram send failed" }, { status: 500 })
         }
 
         // 4. Log to Database (Outbound Message)
@@ -63,17 +68,26 @@ export async function POST(request: NextRequest) {
 
         let savedMessage = null
         if (conv) {
-            const { data: inserted, error: saveError } = await supabase.from("messages").insert({
-                id: `mid_out_${Date.now()}_${Math.random()}`,
+            // The send response and webhook echo identify the same message.
+            // Ignore a conflict if the echo arrived before this request completed.
+            const messageId = data.message_id
+            if (typeof messageId !== "string" || !messageId) {
+                console.error("[Inbox Send] Missing Instagram message ID")
+                return NextResponse.json({ success: true, data, savedMessage: null })
+            }
+            const { error: saveError } = await supabase.from("messages").upsert({
+                id: messageId,
                 conversation_id: conv.id,
                 user_id: userId,
                 sender_id: user.business_account_id,
                 sender_username: user.username,
                 content: message || "[Attachment]",
                 is_from_instagram: false
-            }).select("*").single()
+            }, { onConflict: "id", ignoreDuplicates: true })
             if (saveError) console.error("[Inbox Send] Failed to save outbound message", saveError.message)
-            savedMessage = inserted
+            const { data: stored } = await supabase.from("messages").select("*")
+                .eq("id", messageId).eq("user_id", userId).single()
+            savedMessage = stored
 
             // Update conversation timestamp
             await supabase

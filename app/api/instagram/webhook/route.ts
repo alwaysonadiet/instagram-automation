@@ -612,7 +612,7 @@ export async function POST(request: NextRequest) {
                 attachments,
                 is_from_instagram: !outgoing,
               })
-              if (messageError) throw messageError
+              if (messageError && messageError.code !== "23505") throw messageError
             }
           } catch (err) {
             console.error("[webhook] Failed to save incoming message", err)
