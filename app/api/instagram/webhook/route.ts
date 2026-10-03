@@ -3,7 +3,6 @@
 import crypto from "crypto"
 import { type NextRequest, NextResponse } from "next/server"
 import { getSupabaseServerClient } from "@/lib/supabase-server"
-import { ensureSchema } from "@/lib/supabase-migrate"
 import {
   sendTextDM,
   sendCardDM,
@@ -214,8 +213,7 @@ export async function POST(request: NextRequest) {
     }
     const body = JSON.parse(rawBody)
     if (!body.entry) return NextResponse.json({ ok: true })
-    // Ensure schema is up-to-date on every cold start (idempotent, no-op if all tables exist)
-    ensureSchema().catch((e) => console.warn("[webhook] ensureSchema failed:", e?.message))
+    // Apply database migrations explicitly before deployment, never during webhook delivery.
     const supabase = await getSupabaseServerClient()
 
     for (const entry of body.entry) {
