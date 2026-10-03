@@ -459,3 +459,20 @@ END $$;
 
 -- Incoming Instagram media attachments; existing inbox RLS also protects this column.
 ALTER TABLE public.messages ADD COLUMN IF NOT EXISTS attachments JSONB NOT NULL DEFAULT '[]'::jsonb;
+
+-- Inbox read status; no message copies or extra polling.
+ALTER TABLE public.conversations ADD COLUMN IF NOT EXISTS is_unread boolean NOT NULL DEFAULT false,
+    ADD COLUMN IF NOT EXISTS last_incoming_at timestamptz;
+CREATE OR REPLACE FUNCTION public.mark_incoming_conversation_unread() RETURNS trigger
+LANGUAGE plpgsql SECURITY INVOKER SET search_path = '' AS $$
+BEGIN
+ IF NEW.is_from_instagram AND NEW.content NOT LIKE 'ACT::%' AND NEW.content <> '[자동화 버튼 클릭]' THEN
+ UPDATE public.conversations SET is_unread = true, last_incoming_at = greatest(last_incoming_at, NEW.created_at)
+ WHERE id = NEW.conversation_id AND user_id = NEW.user_id;
+ END IF;
+ RETURN NEW;
+END; $$;
+REVOKE ALL ON FUNCTION public.mark_incoming_conversation_unread() FROM PUBLIC, anon, authenticated;
+DROP TRIGGER IF EXISTS mark_incoming_conversation_unread ON public.messages;
+CREATE TRIGGER mark_incoming_conversation_unread AFTER INSERT ON public.messages
+FOR EACH ROW EXECUTE FUNCTION public.mark_incoming_conversation_unread();

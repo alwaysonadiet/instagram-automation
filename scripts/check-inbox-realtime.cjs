@@ -192,6 +192,24 @@ async function checkConversationStatus() {
   assert.equal((await DELETE(request(null))).status, 400)
 }
 
-Promise.resolve().then(checkAuthorization).then(checkOAuthBridge).then(checkRealtime).then(checkConversationStatus).then(() => {
+async function checkReadStatus() {
+ let identity=null, owned=true, updates=[], filters=[], readFilter;
+ const q={select(){return q},eq(k,v){filters.push([k,v]);return q},update(v){updates.push(v);return q},or(v){readFilter=v;return q},maybeSingle:async()=>({data:owned?{id:'c'}:null}),then(a,b){return Promise.resolve({data:[{id:'c'}]}).then(a,b)}};
+ const {PATCH}=load('app/api/inbox/conversations/route.ts',{
+  '@/lib/instagram-api':{},'next/server':{NextResponse:{json:(data,o)=>({data,status:o?.status||200})}},
+  '@/lib/instagram-auth':{getInstagramIdentity:async()=>identity},'@/lib/supabase-server':{getSupabaseServerClient:async()=>({from:()=>q})}
+ });
+ const req=body=>({json:async()=>body});
+ assert.equal((await PATCH(req({conversationId:'c',isUnread:true}))).status,401);
+ identity={userId:'owner'};owned=false;
+ assert.equal((await PATCH(req({conversationId:'other',isUnread:true}))).status,404);assert.equal(updates.length,0);
+ owned=true;assert.equal((await PATCH(req({conversationId:'c',isUnread:false}))).status,400);
+ assert.equal((await PATCH(req({conversationId:'c',isUnread:true}))).status,200);assert.deepEqual(updates.pop(),{is_unread:true});
+ assert.equal((await PATCH(req({conversationId:'c',isUnread:false,readThrough:'2026-10-03T01:00:00Z'}))).status,200);
+ assert.deepEqual(updates.pop(),{is_unread:false});assert.match(readFilter,/last_incoming_at.lte.2026-10-03T01:00:00.000Z/);
+ assert.ok(filters.some(([k,v])=>k==='user_id'&&v==='owner'));
+}
+
+Promise.resolve().then(checkAuthorization).then(checkOAuthBridge).then(checkRealtime).then(checkConversationStatus).then(checkReadStatus).then(() => {
   console.log('PASS: verified ownership, no idle polling, event refresh, incoming sound, deduplication, reconnect and cleanup')
 }).catch(error => { console.error(error); process.exitCode = 1 })

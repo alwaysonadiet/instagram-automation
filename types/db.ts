@@ -5,6 +5,8 @@ export interface Conversation {
     recipient_username: string
     recipient_display_name?: string | null
     recipient_profile_pic?: string | null
+    is_unread?: boolean
+    last_incoming_at?: string | null
     last_message_at: string
     created_at: string
     updated_at: string

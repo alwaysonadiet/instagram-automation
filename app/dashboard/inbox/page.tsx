@@ -69,6 +69,7 @@ export default function InboxPage() {
             )}>
                 <ChatWindow
                     revision={realtime.chatRevision}
+                    onReadChanged={() => setLocalRevision(n => n + 1)}
                     onStatusChanged={() => { setSelectedConversationId(null); setLocalRevision(n => n + 1) }}
                     conversationId={selectedConversationId}
                     recipientName={selectedRecipientName}

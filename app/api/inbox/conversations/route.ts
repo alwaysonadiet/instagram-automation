@@ -63,3 +63,26 @@ export async function DELETE(request: NextRequest) {
     if (!data) return NextResponse.json({ error: "Not found" }, { status: 404 })
     return NextResponse.json({ success: true })
 }
+
+export async function PATCH(request: NextRequest) {
+    const identity = await getInstagramIdentity()
+    if (!identity) return NextResponse.json({ error: "Please log in again" }, { status: 401 })
+    let body
+    try { body = await request.json() } catch { return NextResponse.json({ error: "Invalid body" }, { status: 400 }) }
+    if (typeof body.conversationId !== "string" || typeof body.isUnread !== "boolean" ||
+        (!body.isUnread && (typeof body.readThrough !== "string" || !Number.isFinite(Date.parse(body.readThrough))))) {
+        return NextResponse.json({ error: "Invalid read status" }, { status: 400 })
+    }
+    const supabase = await getSupabaseServerClient()
+    const { data: owned, error: lookupError } = await supabase.from("conversations").select("id")
+        .eq("id", body.conversationId).eq("user_id", identity.userId).maybeSingle()
+    if (lookupError) return NextResponse.json({ error: "Could not update read status" }, { status: 500 })
+    if (!owned) return NextResponse.json({ error: "Not found" }, { status: 404 })
+    let query = supabase.from("conversations").update({ is_unread: body.isUnread })
+        .eq("id", body.conversationId).eq("user_id", identity.userId).eq("is_unread", !body.isUnread)
+    // A message arriving after the displayed batch must stay unread.
+    if (!body.isUnread) query = query.or(`last_incoming_at.is.null,last_incoming_at.lte.${new Date(body.readThrough).toISOString()}`)
+    const { data, error } = await query.select("id")
+    if (error) return NextResponse.json({ error: "Could not update read status" }, { status: 500 })
+    return NextResponse.json({ success: true, changed: !!data?.length })
+}

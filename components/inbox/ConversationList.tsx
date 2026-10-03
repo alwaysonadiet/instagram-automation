@@ -83,13 +83,14 @@ export function ConversationList({ accountUsername, userId, selectedId, onSelect
                             <div className="flex-1 min-w-0 text-left">
                                 <div className="flex items-center justify-between mb-0.5">
                                     <span className={cn(
-                                        "font-semibold text-sm truncate",
+                                        conv.is_unread ? "font-bold text-sm truncate" : "font-normal text-sm truncate",
                                         selectedId === conv.id ? "text-accent-yellow-foreground dark:text-accent-yellow" : "text-foreground"
                                     )}>
                                         {/^[A-Za-z0-9._]+$/.test(conv.recipient_username) ? (
                                             <InstagramDMLink username={conv.recipient_username} accountUsername={accountUsername} className="hover:underline">@{conv.recipient_username}</InstagramDMLink>
                                         ) : <>@{conv.recipient_username}</>}
                                     </span>
+                                    {conv.is_unread && <span className="size-2 rounded-full bg-blue-500 shrink-0 mx-2" role="img" aria-label="읽지 않은 메시지" title="읽지 않음" />}
                                     <span className="text-[10px] text-muted-foreground whitespace-nowrap">
                                         {new Date(conv.last_message_at).toLocaleDateString([], { month: 'short', day: 'numeric' })}
                                     </span>

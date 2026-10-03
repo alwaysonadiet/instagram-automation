@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState, useRef } from "react"
-import { Send, Loader2, MoreVertical, Phone, Video, Zap, ChevronLeft } from "lucide-react"
+import { Send, Loader2, MoreVertical, Mail, Phone, Video, Zap, ChevronLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { InstagramDMLink } from "./InstagramDMLink"
@@ -10,6 +10,7 @@ import type { Message } from "@/types/db"
 
 interface ChatWindowProps {
     accountUsername?: string | null
+    onReadChanged?: () => void
     onStatusChanged?: () => void
     revision?: number
     conversationId: string | null
@@ -21,7 +22,26 @@ interface ChatWindowProps {
     onBack?: () => void
 }
 
-export function ChatWindow({ accountUsername, conversationId, recipientId, recipientName, recipientDisplayName, recipientProfilePic, userId, onBack, revision = 0, onStatusChanged }: ChatWindowProps) {
+export function ChatWindow({ accountUsername, conversationId, recipientId, recipientName, recipientDisplayName, recipientProfilePic, userId, onBack, revision = 0, onStatusChanged, onReadChanged }: ChatWindowProps) {
+    const readCallback = useRef(onReadChanged)
+    readCallback.current = onReadChanged
+    const pendingRead = useRef<Promise<void>>(Promise.resolve())
+    const [markingUnread, setMarkingUnread] = useState(false)
+    const [readError, setReadError] = useState("")
+    const manualUnread = useRef(false)
+    async function markUnread() {
+        if (!conversationId || markingUnread) return
+        manualUnread.current = true
+        setMarkingUnread(true); setReadError("")
+        try {
+            await pendingRead.current
+            const res = await fetch("/api/inbox/conversations", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ conversationId, isUnread: true }) })
+            if (!res.ok) throw new Error()
+            onStatusChanged?.()
+        } catch { manualUnread.current = false; setReadError("읽지 않음 표시를 저장하지 못했어요. 다시 시도해주세요.") }
+        finally { setMarkingUnread(false) }
+    }
+    useEffect(() => { manualUnread.current = false; setReadError("") }, [conversationId])
     const [messages, setMessages] = useState<Message[]>([])
     const [loading, setLoading] = useState(false)
     const [inputText, setInputText] = useState("")
@@ -67,6 +87,16 @@ export function ChatWindow({ accountUsername, conversationId, recipientId, recip
                 if (!controller.signal.aborted && Array.isArray(data)) {
                     loadedConversation.current = conversationId
                     setMessages(data)
+                    const incoming = data.filter(message => message.is_from_instagram)
+                    const readThrough = incoming.reduce((latest, message) => Date.parse(message.created_at) > Date.parse(latest) ? message.created_at : latest, "1970-01-01T00:00:00.000Z")
+                    if (document.visibilityState === "visible" && !manualUnread.current) {
+                        pendingRead.current = (async () => {
+                            const response = await fetch("/api/inbox/conversations", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ conversationId, isUnread: false, readThrough }) })
+                            if (!response.ok) throw new Error()
+                            const result = await response.json()
+                            if (result.changed) readCallback.current?.()
+                        })().catch(() => { if (!controller.signal.aborted) setReadError("읽음 상태를 저장하지 못했어요.") })
+                    }
                 }
             } catch (error) {
                 if (!controller.signal.aborted) console.error("Failed to load messages", error)
@@ -75,8 +105,10 @@ export function ChatWindow({ accountUsername, conversationId, recipientId, recip
             }
         }
 
+        const onVisible = () => { if (document.visibilityState === "visible") void fetchMessages() }
+        document.addEventListener("visibilitychange", onVisible)
         fetchMessages()
-        return () => controller.abort()
+        return () => { controller.abort(); document.removeEventListener("visibilitychange", onVisible) }
     }, [conversationId, revision])
 
     // Fetch automations for quick reply
@@ -166,6 +198,7 @@ export function ChatWindow({ accountUsername, conversationId, recipientId, recip
                     </div>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
+                    <Button variant="ghost" size="icon" disabled={markingUnread} onClick={markUnread} aria-label="읽지 않음으로 표시" title="읽지 않음으로 표시"><Mail className="w-4 h-4" /></Button>
                     <Button variant="outline" size="sm" disabled={closing} onClick={changeStatus} title="이 앱의 대화 기록을 삭제합니다. 인스타 원본은 유지됩니다.">{closing ? "처리 중…" : "닫기 · 기록 삭제"}</Button>
                     <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground hidden md:flex" aria-label="Call"><Phone className="w-4 h-4" /></Button>
                     <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground hidden md:flex" aria-label="Video"><Video className="w-4 h-4" /></Button>
@@ -261,6 +294,7 @@ export function ChatWindow({ accountUsername, conversationId, recipientId, recip
                 </div>
             )}
 
+            {readError && <p role="alert" className="px-4 text-xs text-destructive">{readError}</p>}
             {/* Input Area */}
             <div className="p-3 md:p-4 border-t border-border bg-card shrink-0">
                 <div className="flex items-center gap-2 bg-muted rounded-xl border border-border p-1.5 focus-within:border-accent-yellow focus-within:ring-2 focus-within:ring-accent-yellow/30 transition-all">
