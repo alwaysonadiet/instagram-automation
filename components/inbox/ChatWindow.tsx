@@ -1,8 +1,9 @@
 "use client"
 
 import { useEffect, useState, useRef } from "react"
-import { Send, Loader2, MoreVertical, Mail, Phone, Video, Zap, ChevronLeft } from "lucide-react"
+import { Send, Loader2, MoreVertical, Mail, X, ExternalLink, Phone, Video, Zap, ChevronLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 import { InstagramDMLink } from "./InstagramDMLink"
 import { RecipientAvatar } from "./RecipientAvatar"
@@ -198,17 +199,30 @@ export function ChatWindow({ accountUsername, conversationId, recipientId, recip
                     </div>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
-                    <Button variant="ghost" size="icon" disabled={markingUnread} onClick={markUnread} aria-label="읽지 않음으로 표시" title="읽지 않음으로 표시"><Mail className="w-4 h-4" /></Button>
-                    <Button variant="outline" size="sm" disabled={closing} onClick={changeStatus} title="이 앱의 대화 기록을 삭제합니다. 인스타 원본은 유지됩니다.">{closing ? "처리 중…" : "닫기 · 기록 삭제"}</Button>
                     <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground hidden md:flex" aria-label="Call"><Phone className="w-4 h-4" /></Button>
                     <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground hidden md:flex" aria-label="Video"><Video className="w-4 h-4" /></Button>
-                    {recipientName && /^[A-Za-z0-9._]+$/.test(recipientName) && (
-                        <Button variant="ghost" size="icon" asChild>
-                            <a href={`https://www.instagram.com/${encodeURIComponent(recipientName)}/`} target="_blank" rel="noopener noreferrer" aria-label="인스타 프로필 보기" title="인스타 프로필 보기">
-                                <MoreVertical className="w-4 h-4" />
-                            </a>
-                        </Button>
-                    )}
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" disabled={markingUnread || closing} aria-label="대화 메뉴">
+                                {markingUnread || closing ? <Loader2 className="w-4 h-4 animate-spin" /> : <MoreVertical className="w-4 h-4" />}
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                            <DropdownMenuItem disabled={markingUnread || closing} onSelect={() => void markUnread()}>
+                                <Mail className="mr-2 w-4 h-4" />읽지 않음으로 표시
+                            </DropdownMenuItem>
+                            <DropdownMenuItem disabled={markingUnread || closing} onSelect={() => void changeStatus()}>
+                                <X className="mr-2 w-4 h-4" />대화 닫기 · 기록 삭제
+                            </DropdownMenuItem>
+                            {recipientName && /^[A-Za-z0-9._]+$/.test(recipientName) && (
+                                <DropdownMenuItem asChild>
+                                    <a href={`https://www.instagram.com/${encodeURIComponent(recipientName)}/`} target="_blank" rel="noopener noreferrer">
+                                        <ExternalLink className="mr-2 w-4 h-4" />인스타 프로필 보기
+                                    </a>
+                                </DropdownMenuItem>
+                            )}
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                 </div>
             </div>
 
