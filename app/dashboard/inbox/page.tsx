@@ -54,7 +54,7 @@ export default function InboxPage() {
                     <Button size="sm" variant="outline" onClick={realtime.toggleSound} aria-pressed={realtime.soundEnabled}>{realtime.soundEnabled ? (realtime.soundReady ? "알림음 끄기" : "알림음 켜짐 · 눌러서 활성화") : "알림음 켜기"}</Button>
                 </div>
                 <ConversationList
-                    accountUsername={username}
+                    onActionCompleted={id => { if (id === selectedConversationId) setSelectedConversationId(null); setLocalRevision(n => n + 1) }}
                     userId={userId}
                     revision={realtime.listRevision + localRevision}
                     selectedId={selectedConversationId}
