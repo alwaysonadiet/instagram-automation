@@ -32,7 +32,8 @@ export async function normaliseExport(input: unknown, path: string, ownerNames: 
   const participants = data.participants.map(p => p.name)
   // Use the export's thread identity, never a display name as an API ID.
   const threadKey = data.thread_path || path.replace(/\/message_\d+\.json$/i, "")
-  const owner = new Set(ownerNames.map(n => n.trim()).filter(Boolean))
+  const nameKey = (name: string) => decodeMetaText(name).normalize("NFC").trim()
+  const owner = new Set(ownerNames.map(nameKey).filter(Boolean))
   const counts = new Map<string, number>()
   const result: HistoryMessage[] = []
   for (const [index, m] of data.messages.entries()) {
@@ -47,8 +48,8 @@ export async function normaliseExport(input: unknown, path: string, ownerNames: 
     const occurrence = occurrences?.[index] ?? counts.get(fingerprint) ?? 0
     counts.set(fingerprint, occurrence + 1)
     const key = await digest([fingerprint, occurrence])
-    const senderIsOwner = owner.has(m.sender_name) || owner.has(decodeMetaText(m.sender_name))
-    const knownOwner = participants.some(p => owner.has(p) || owner.has(decodeMetaText(p)))
+    const senderIsOwner = owner.has(nameKey(m.sender_name))
+    const knownOwner = participants.some(p => owner.has(nameKey(p)))
     result.push({ key, threadKey, sourcePath: path, sender: m.sender_name,
       direction: senderIsOwner ? "outgoing" : knownOwner ? "incoming" : "unknown",
       timestamp: new Date(m.timestamp_ms).toISOString(), original: m,
