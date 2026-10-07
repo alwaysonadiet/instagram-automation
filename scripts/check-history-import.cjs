@@ -36,6 +36,13 @@ async function run() {
  const archive = zipSync({ [path]: strToU8(JSON.stringify(input)), 'photo.jpg': new Uint8Array(200), 'profile.json': strToU8('{}') })
  const parsed = await readHistoryFile(new File([archive], 'instagram.zip'))
  assert.equal(parsed.length, 1); assert.deepEqual(parsed[0].data, input)
+ const flatPath = 'your_instagram_activity/messages/inbox/customer_123.json'
+ const mixed = zipSync({ [path]: strToU8(JSON.stringify(input)), [flatPath]: strToU8(JSON.stringify({ ...input, thread_path: 'inbox/other_456' })), 'your_instagram_activity/messages/reported_conversations.json': strToU8('{}') })
+ const mixedParsed = await readHistoryFile(new File([mixed], 'mixed.zip'))
+ assert.equal(mixedParsed.length, 2, 'flat conversation JSON must also be imported')
+ assert.ok(mixedParsed.some(entry => entry.path === flatPath))
+ const decomposedOwner = { participants: [{ name: '\u1100\u1161' }, { name: 'Customer' }], messages: [{ sender_name: '\u1100\u1161', timestamp_ms: 1700000000000, content: 'Hello' }] }
+ assert.equal((await normaliseExport(decomposedOwner, flatPath, ['가']))[0].direction, 'outgoing', 'Korean NFC/NFD names must match without changing raw text')
  await assert.rejects(() => readHistoryFile(new File([zipSync({ 'profile.json': strToU8('{}') })], 'empty.zip')))
  console.log('History: raw preservation, encoding, attachment references, repeat import, repeated real events, batching, direction, ZIP selection and malformed input passed')
 }
