@@ -15,7 +15,8 @@ export async function readHistoryFile(file: File): Promise<{ path: string; data:
   const files = await new Promise<Record<string, Uint8Array>>((resolve, reject) => {
     unzip(new Uint8Array(buffer), {
       filter(entry) {
-        if (!/(^|\/)messages\/(?:inbox|archived_threads|message_requests)\/.*\/message_\d+\.json$/i.test(entry.name)) return false
+        // Real exports include both thread/message_1.json and flat inbox/thread.json.
+        if (!/(^|\/)messages\/(?:inbox|archived_threads|message_requests)\/.+\.json$/i.test(entry.name)) return false
         total += entry.originalSize
         if (entry.originalSize > MAX_JSON || total > MAX_TOTAL_JSON) throw new Error("압축을 푼 메시지 JSON 크기가 너무 큽니다. 내보내기 기간을 나눠 주세요.")
         return true
