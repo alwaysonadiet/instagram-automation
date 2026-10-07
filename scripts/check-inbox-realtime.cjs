@@ -16,7 +16,7 @@ async function checkAuthorization() {
   let resourceOwned = false
   let ownershipChecks = 0
   const response = () => ({ headers: new Headers(), cookies: { set() {} }, status: 200 })
-  const { proxy } = load('proxy.ts', {
+  const { middleware: proxy } = load('middleware.ts', {
     '@supabase/ssr': { createServerClient: () => ({ auth: { getUser: async () => ({ data: { user } }) } }) },
     'next/server': { NextResponse: { next: response, json: (_body, opts) => ({ status: opts.status }) } },
     '@/lib/supabase-admin': { getSupabaseAdmin: () => ({ from: () => {

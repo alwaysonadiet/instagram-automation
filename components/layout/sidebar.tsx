@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils"
 import { ThemeToggle } from "@/components/theme-toggle"
 
 const NAV = [
+  { href: "/dashboard/data", label: "Data / DM Import", icon: "/icons/journal.svg" },
   { href: "/dashboard", label: "Home", icon: "/icons/home.svg" },
   { href: "/dashboard/automations", label: "Auto replies", icon: "/icons/journal.svg" },
   { href: "/dashboard/inbox", label: "Conversations", icon: "/icons/chat.svg" },
