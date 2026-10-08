@@ -1,9 +1,11 @@
 "use client"
+import { HistoryArchive } from "@/components/history/HistoryArchive"
 import { useRef, useState } from "react"
 import { readHistoryFile } from "@/lib/history/archive"
 import { decodeMetaText, normaliseExport, type HistoryMessage } from "@/lib/history/normalise"
 
 export default function DataPage() {
+  const [revision, setRevision] = useState(0)
   const [ownerNames, setOwnerNames] = useState("")
   const [files, setFiles] = useState<{ path: string; data: unknown; messages: HistoryMessage[] }[]>([])
   const [busy, setBusy] = useState(false)
@@ -41,10 +43,23 @@ export default function DataPage() {
           setStatus(`${inserted.toLocaleString()}개 저장 · ${duplicates.toLocaleString()}개 중복 건너뜀`)
         }
       }
+      setRevision(v => v + 1)
       setStatus(`완료: ${inserted.toLocaleString()}개 저장 · ${duplicates.toLocaleString()}개 중복 건너뜀`)
     } catch (e) {
       setError(`${e instanceof Error ? e.message : "저장하지 못했습니다."} 이미 저장된 메시지는 유지됩니다. 같은 파일로 다시 시도할 수 있어요.`)
     } finally { setBusy(false) }
+  }
+  async function correctDirections() {
+    if (!names.length || busy) return
+    setBusy(true); setError("")
+    try {
+      const response = await fetch("/api/history/direction", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ownerNames: names }) })
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.error)
+      setStatus(`저장된 ${Number(result.updated).toLocaleString()}개 메시지의 발신 방향을 다시 구분했어요. 원문은 그대로 유지됩니다.`)
+      setRevision(v => v + 1)
+    } catch (e) { setError(e instanceof Error ? e.message : "수정하지 못했어요.") }
+    finally { setBusy(false) }
   }
   const total = files.reduce((n, f) => n + f.messages.length, 0)
   const participants = Array.from(new Set(files.flatMap(f => f.messages.flatMap(m => m.participants.map(decodeMetaText)))))
@@ -56,6 +71,7 @@ export default function DataPage() {
       <label className="block text-sm">내보내기에 표시된 내 이름 (이전 이름이 있다면 한 줄에 하나씩)
         <textarea className="mt-2 block w-full rounded-lg border bg-background p-3" value={ownerNames} onChange={e => setOwnerNames(e.target.value)} rows={2} disabled={busy} />
       </label>
+      <button type="button" disabled={busy || !names.length} onClick={() => void correctDirections()} className="rounded-lg border px-3 py-2 text-sm disabled:opacity-50">이 이름으로 저장된 메시지 발신 방향 수정</button>
       <div className="rounded-lg border-2 border-dashed p-8 text-center" onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); void preview(e.dataTransfer.files[0]) }}>
         <label className="cursor-pointer">ZIP 또는 JSON 선택 / 여기에 놓기<input ref={fileInput} type="file" accept=".zip,.json" className="sr-only" disabled={busy} onChange={e => void preview(e.target.files?.[0])} /></label>
       </div>
@@ -68,5 +84,6 @@ export default function DataPage() {
         <button className="rounded-lg bg-primary px-4 py-2 text-primary-foreground disabled:opacity-50" disabled={busy} onClick={() => void save()}>{busy ? "처리 중…" : "원문 저장"}</button>
       </>}
     </section>
+    <HistoryArchive revision={revision} />
   </div>
 }
