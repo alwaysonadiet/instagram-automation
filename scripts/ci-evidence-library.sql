@@ -1,18 +1,25 @@
 -- Derived, non-exclusive evidence. Quotes remain substrings of the original DM.
 CREATE OR REPLACE FUNCTION public.ci_extract_signals(p_text text) RETURNS jsonb
 LANGUAGE plpgsql IMMUTABLE SECURITY INVOKER SET search_path=public AS $$
-DECLARE t text:=coalesce(p_text,''); s text; l text; result jsonb:='[]'; labels text[]; k text; outcome text;
+DECLARE t text:=coalesce(p_text,''); s text; l text; result jsonb:='[]'; labels text[]; k text; outcome text; matched text[]; reported boolean;
 BEGIN
  IF lower(t) ~ '(귀사의.*서비스|수익을.?배분|제휴.{0,30}제안|협찬.{0,30}제안|협업.{0,30}제안)' THEN RETURN result; END IF;
  IF trim(t)='' OR t ~* '^(reacted .+ to your message|liked (a |your )?message|Instagram 게시물의 댓글에 비공개 답장|You (sent|unsent))' THEN RETURN result; END IF;
  FOR s IN SELECT trim(x) FROM regexp_split_to_table(t,E'[\\n\\r]+|(?<=[.!?。？！])\\s+') x LOOP
   l:=lower(s); labels:=ARRAY[]::text[];
   IF length(regexp_replace(l,'[^가-힣a-z0-9]','','g'))<5 THEN CONTINUE; END IF;
-  -- Outcome evidence requires an experienced change, not a wish, hypothetical, or low/no sales.
-  -- PostgreSQL substring with groups returns the first group; use a full-match wrapper.
-  outcome:=substring(l FROM '((?:첫.?판매|첫.?매출|첫.?주문|첫.?세일|판매(?:가|까지|도)|매출이|수익이|주문이|수입이|차칭).{0,12}(?:났|나왔|되었|올랐|올라|늘었|늘어|생겼|발생|되고|나고|내고)|(?:팔렸|팔았|벌었)|첫.?(?:판매|매출|주문|세일).{0,8}(?:했어요|했습니다|하였습니다)|판매를.{0,8}(?:했어요|했습니다)|[0-9]+[ ]*(?:세일|주문|판매).{0,8}(?:해서|했|나왔|달성|넘었)|[0-9]+[ ]*(?:만원|달러|불).{0,12}(?:벌고|벌었))');
-  IF outcome IS NOT NULL AND outcome !~ '(안|못|않|지지부진)' AND
-    l !~ '(기획|seller.*verify|레노님이.{0,50}하셨|못.?벌었|안.?팔렸|싶|발생하면|발생하고.?하면|했으면|겠지|팔았다면|드릴게요|줬으면|주었으면|발생하는.?구조|이어지는.?사람|첫.?판매.{0,12}해야)' THEN labels:=array_append(labels,'testimonial'); END IF;
+  -- Judge each reported result locally. A wish elsewhere must not erase a real sale.
+  reported:=false;
+  FOR matched IN SELECT regexp_matches(l,
+   '(.{0,35})((?:첫.?(?:판매|매출|주문|세일).{0,14}(?:났|나왔|되었|됐|일어났|했어요|했습니다|하였습니다|했었|맛.?본|발생했|발생하여))|(?:(?:판매|매출|수익|주문|수입).{0,12}(?:판매했|판매.?되서|판매.?돼서|늘어|늘었|올랐|발생했|발생하여|되고.?있|나고.?있))|(?:판매.{0,6}(?:했었|했어요|했습니다|되서|됐|되었))|(?:팔렸|팔았|소소하게.?팔려)|(?:[0-9]+[ ]*(?:세일|주문|판매).{0,8}(?:해서|했|달성|넘었))|(?:[0-9]+[ ]*(?:만.?원|달러|불).{0,12}(?:벌고|벌었))|(?:(?:스타.?셀러|베스트셀러|스타샵).{0,15}(?:달았|달아서|붙었|받았|됐|되었)))(.{0,30})','g') LOOP
+    IF matched[2] !~ '(안|못|않|지지부진)'
+      AND matched[1] !~ '(못.?$|안.?$|님이.{0,20}$|남들이.{0,20}$|셀러님이.{0,20}$|했으면.{0,30}$|되면.{0,25}$|목표.{0,20}$)'
+      AND matched[3] !~ '^(었겠|나|는지|을까|으면|다면|겠|면|.{0,5}(싶|주면|줬으면|날까요|가능할|할까요))'
+      AND matched[1]||matched[2]||matched[3] !~ '(기획|seller.*verify|하셨|했다고.?하|되었다고.?하|들려드릴|드릴게요|목표)' THEN
+      reported:=true; EXIT;
+    END IF;
+  END LOOP;
+  IF reported THEN labels:=array_append(labels,'testimonial'); END IF;
   IF l ~ '(완성|완료|출시|오픈|개설|입점|리스팅|등록|실행|만들|도움|자신감|해결|달라|배웠|배우게)' AND
     l ~ '(했어요|했습니다|했어|했습|하게.?됐|하게.?되었|되었|됐어요|됐습니다|생겼|많이.?됐|많이.?되었|해결됐|달라졌|완성했|완료했|만들었)' AND
     l !~ '(싶|바라|목표|했으면|되면)' THEN labels:=array_append(labels,'progress'); END IF;
