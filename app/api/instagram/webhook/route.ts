@@ -1,7 +1,7 @@
 /* @ts-nocheck */
+import { publicReplyDefaults } from "@/lib/public-replies"
 
 import crypto from "crypto"
-import { publicReplyDefaults } from "@/lib/public-replies"
 import { type NextRequest, NextResponse } from "next/server"
 import { getSupabaseServerClient } from "@/lib/supabase-server"
 import {
@@ -45,7 +45,6 @@ function isValidSignature(rawBody: string, signatureHeader: string | null): bool
     )
   })
 }
-
 
 
 // Max times we'll send the gate card for an unverifiable follow status on a single unlock event.
@@ -110,7 +109,11 @@ async function sendAutomationResponse(
   content: any,
   opts: { skipTyping?: boolean } = {},
 ) {
-  const delaySeconds = Number(content.delay_seconds) || 0
+  const maximumDelay = Math.max(0, Math.min(30, Number(content.delay_seconds) || 0))
+  const minimumDelay = 1
+  const delaySeconds = content.delay_random === true && maximumDelay > 0
+    ? minimumDelay + Math.floor(Math.random() * (maximumDelay - minimumDelay + 1))
+    : maximumDelay
   const useTyping = content.typing_indicator === true && recipient.id && !opts.skipTyping
 
   if (useTyping) await sendSenderAction(token, recipient.id!, "typing_on")
