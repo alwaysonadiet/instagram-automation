@@ -1,6 +1,7 @@
 /* @ts-nocheck */
 import { publicReplyDefaults } from "@/lib/public-replies"
 
+import { trackAutomatedSend } from "@/lib/message-provenance"
 import crypto from "crypto"
 import { type NextRequest, NextResponse } from "next/server"
 import { getSupabaseServerClient } from "@/lib/supabase-server"
@@ -20,11 +21,11 @@ import { generateAIReply } from "@/lib/ai-reply"
 import { bumpUnlockAttempt, clearUnlockAttempts, unlockKey } from "@/lib/unlock-tracking"
 
 // Editable follower prompts are sent only when follow status is not confirmed.
-async function sendFollowPrompt(token: string, recipient: { id?: string; comment_id?: string }, content: any, ruleId: string) {
-  return sendButtonDM(token, recipient, content.follow_gate.message.trim().slice(0, 640), [{
+async function sendFollowPrompt(token: string, recipient: { id?: string; comment_id?: string }, content: any, ruleId: string, owner: { id: string | number }) {
+  return trackAutomatedSend(owner, sendButtonDM(token, recipient, content.follow_gate.message.trim().slice(0, 640), [{
     type: "postback", title: content.follow_gate.confirm_button?.trim().slice(0, 20) || "팔로우 했어요 ✅",
     payload: `UNLOCK_CONTENT_${ruleId}`,
-  }])
+  }]), recipient)
 }
 
 const WEBHOOK_VERIFY_TOKEN = process.env.INSTAGRAM_WEBHOOK_VERIFY_TOKEN
@@ -108,6 +109,7 @@ async function sendAutomationResponse(
   recipient: { id?: string; comment_id?: string },
   content: any,
   opts: { skipTyping?: boolean } = {},
+  owner?: { id: string | number },
 ) {
   const maximumDelay = Math.max(0, Math.min(30, Number(content.delay_seconds) || 0))
   const minimumDelay = 1
@@ -127,16 +129,16 @@ async function sendAutomationResponse(
 
   let result
   if (content.media?.url) {
-    result = await sendMediaDM(token, recipient, content.media.type || "image", content.media.url)
+    result = await (owner ? trackAutomatedSend(owner, sendMediaDM(token, recipient, content.media.type || "image", content.media.url), recipient) : sendMediaDM(token, recipient, content.media.type || "image", content.media.url))
     if (result.ok && content.message) {
-      result = await sendTextDM(token, recipient, content.message, quickReplies)
+      result = await (owner ? trackAutomatedSend(owner, sendTextDM(token, recipient, content.message, quickReplies), recipient) : sendTextDM(token, recipient, content.message, quickReplies))
     }
   } else if (content.buttons?.length && content.message) {
-    result = await sendButtonDM(token, recipient, content.message, content.buttons)
+    result = await (owner ? trackAutomatedSend(owner, sendButtonDM(token, recipient, content.message, content.buttons), recipient) : sendButtonDM(token, recipient, content.message, content.buttons))
   } else if (content.card) {
-    result = await sendCardDM(token, recipient, content.card)
+    result = await (owner ? trackAutomatedSend(owner, sendCardDM(token, recipient, content.card), recipient) : sendCardDM(token, recipient, content.card))
   } else if (content.message) {
-    result = await sendTextDM(token, recipient, content.message, quickReplies)
+    result = await (owner ? trackAutomatedSend(owner, sendTextDM(token, recipient, content.message, quickReplies), recipient) : sendTextDM(token, recipient, content.message, quickReplies))
   } else {
     result = { ok: false, error: "empty content" }
   }
@@ -366,8 +368,8 @@ export async function POST(request: NextRequest) {
                       if (replyMode !== "dm_only") await replyToComment(user.access_token, commentId, getPublicReply())
                       if (replyMode !== "public_only") {
                         const status = await verifyFollowStatus(senderId, user.access_token)
-                        if (status.follows === true) await sendAutomationResponse(user.access_token, { comment_id: commentId }, content, { skipTyping: true })
-                        else await sendFollowPrompt(user.access_token, { comment_id: commentId }, content, match.id)
+                        if (status.follows === true) await sendAutomationResponse(user.access_token, { comment_id: commentId }, content, { skipTyping: true }, user)
+                        else await sendFollowPrompt(user.access_token, { comment_id: commentId }, content, match.id, user)
                       }
                     } else if (content.check_follow === true) {
                       const followResult = await verifyFollowStatus(senderId, user.access_token)
@@ -378,12 +380,7 @@ export async function POST(request: NextRequest) {
                           await replyToComment(user.access_token, commentId, getPublicReply())
                         }
                         if (replyMode !== "public_only") {
-                          await sendAutomationResponse(
-                            user.access_token,
-                            { comment_id: commentId },
-                            content,
-                            { skipTyping: true },
-                          )
+                          await sendAutomationResponse(user.access_token, { comment_id: commentId }, content, { skipTyping: true }, user)
                         }
                       } else if (followResult.follows === false) {
                         console.log(`[webhook] 🔒 Comment follower gate: @${senderId} doesn't follow @${user.username}`)
@@ -391,11 +388,11 @@ export async function POST(request: NextRequest) {
                           await replyToComment(user.access_token, commentId, getPublicReply())
                         }
                         if (replyMode !== "public_only") {
-                          await sendCardDM(
+                          await trackAutomatedSend(user, sendCardDM(
                             user.access_token,
                             { comment_id: commentId },
                             buildFollowGateCard({ gate: content.follow_gate, username: user.username, ruleId: match.id }),
-                          )
+                          ), { comment_id: commentId })
                         }
                       } else {
                         // Unverifiable status keeps content locked.
@@ -406,11 +403,11 @@ export async function POST(request: NextRequest) {
                             await replyToComment(user.access_token, commentId, getPublicReply())
                           }
                           if (replyMode !== "public_only") {
-                            await sendCardDM(
+                            await trackAutomatedSend(user, sendCardDM(
                               user.access_token,
                               { comment_id: commentId },
                               buildFollowGateCard({ gate: content.follow_gate, username: user.username, ruleId: match.id }),
-                            )
+                            ), { comment_id: commentId })
                           }
 
                       }
@@ -420,12 +417,7 @@ export async function POST(request: NextRequest) {
                         await replyToComment(user.access_token, commentId, getPublicReply())
                       }
                       if (replyMode !== "public_only") {
-                        await sendAutomationResponse(
-                          user.access_token,
-                          { comment_id: commentId },
-                          content,
-                          { skipTyping: true },
-                        )
+                        await sendAutomationResponse(user.access_token, { comment_id: commentId }, content, { skipTyping: true }, user)
                       }
                     }
         }
@@ -488,28 +480,28 @@ export async function POST(request: NextRequest) {
 
                                           if (content.check_follow === true && content.follow_gate?.message?.trim()) {
                                             const status = await verifyFollowStatus(senderId, user.access_token)
-                                            if (status.follows === true) await sendAutomationResponse(user.access_token, { id: senderId }, content)
-                                            else await sendFollowPrompt(user.access_token, { id: senderId }, content, match.id)
+                                            if (status.follows === true) await sendAutomationResponse(user.access_token, { id: senderId }, content, {}, user)
+                                            else await sendFollowPrompt(user.access_token, { id: senderId }, content, match.id, user)
                                           } else if (content.check_follow === true) {
                                             const followResult = await verifyFollowStatus(senderId, user.access_token)
 
                                             if (followResult.follows === true) {
                                               console.log(`[webhook] ✅ Story follower gate: @${senderId} follows @${user.username} — sending content`)
-                                              await sendAutomationResponse(user.access_token, { id: senderId }, content)
+                                              await sendAutomationResponse(user.access_token, { id: senderId }, content, {}, user)
                                             } else if (followResult.follows === false) {
                                               console.log(`[webhook] 🔒 Story follower gate: @${senderId} doesn't follow @${user.username}`)
-                                              await sendCardDM(user.access_token, { id: senderId }, buildFollowGateCard({ gate: content.follow_gate, username: user.username, ruleId: match.id }))
+                                              await trackAutomatedSend(user, sendCardDM(user.access_token, { id: senderId }, buildFollowGateCard({ gate: content.follow_gate, username: user.username, ruleId: match.id })), { id: senderId })
                                             } else {
                                               // Unverifiable status keeps content locked.
 
                                                 // Auth failure — fail CLOSED: send gate
                                                 console.warn(`[webhook] ⚠️ Story follower gate verification unavailable for @${senderId}; sending gate`)
-                                                await sendCardDM(user.access_token, { id: senderId }, buildFollowGateCard({ gate: content.follow_gate, username: user.username, ruleId: match.id }))
+                                                await trackAutomatedSend(user, sendCardDM(user.access_token, { id: senderId }, buildFollowGateCard({ gate: content.follow_gate, username: user.username, ruleId: match.id })), { id: senderId })
 
                                             }
                                           } else {
                                             // No follower check required — send normally
-                                            await sendAutomationResponse(user.access_token, { id: senderId }, content)
+                                            await sendAutomationResponse(user.access_token, { id: senderId }, content, {}, user)
                                           }
                                         }
         }
@@ -682,7 +674,7 @@ export async function POST(request: NextRequest) {
                         const aiReply = await generateAIReply(triggerValue, user.ai_context || "", history, user.groq_api_key, user.ai_base_url, user.ai_model)
                         if (aiReply) {
                           await sendSenderAction(user.access_token, senderId, "typing_on")
-                          const result = await sendTextDM(user.access_token, { id: senderId }, aiReply)
+                          const result = await trackAutomatedSend(user, sendTextDM(user.access_token, { id: senderId }, aiReply), { id: senderId })
                           if (result?.ok && conv) {
                             try {
                               await supabase.from("messages").insert({
@@ -717,8 +709,8 @@ export async function POST(request: NextRequest) {
                       const status = await verifyFollowStatus(senderId, user.access_token)
                       if (status.follows === true) {
                         await clearUnlockAttempts(unlockKey(senderId, match.id))
-                        await sendAutomationResponse(user.access_token, { id: senderId }, content)
-                      } else await sendFollowPrompt(user.access_token, { id: senderId }, content, match.id)
+                        await sendAutomationResponse(user.access_token, { id: senderId }, content, {}, user)
+                      } else await sendFollowPrompt(user.access_token, { id: senderId }, content, match.id, user)
                       continue
                     }
 
@@ -735,7 +727,7 @@ export async function POST(request: NextRequest) {
                         if (followResult.follows === true) {
                           await clearUnlockAttempts(attemptKey)
                           console.log(`[webhook] ✅ DM unlock verified for @${senderId}`)
-                          const result = await sendAutomationResponse(user.access_token, { id: senderId }, content)
+                          const result = await sendAutomationResponse(user.access_token, { id: senderId }, content, {}, user)
                           const conv = await incomingSaved
                           if (result?.ok && conv) {
                             try {
@@ -755,7 +747,7 @@ export async function POST(request: NextRequest) {
                         } else if (followResult.follows === false) {
                           await clearUnlockAttempts(attemptKey)
                           console.log(`[webhook] ❌ DM unlock rejected: @${senderId} still doesn't follow`)
-                          const result = content.follow_gate?.message?.trim() ? await sendTextDM(user.access_token, { id: senderId }, content.follow_gate.not_following_message?.trim().slice(0, 1000) || "팔로우 후 위 확인 버튼을 다시 눌러주세요.") : await sendCardDM(user.access_token, { id: senderId }, buildFollowGateCard({ gate: content.follow_gate, username: user.username, ruleId: match.id, title: "아직 팔로우가 확인되지 않았어요", subtitle: `@${user.username} 팔로우 후 버튼을 다시 눌러주세요.` }))
+                          const result = content.follow_gate?.message?.trim() ? await trackAutomatedSend(user, sendTextDM(user.access_token, { id: senderId }, content.follow_gate.not_following_message?.trim().slice(0, 1000) || "팔로우 후 위 확인 버튼을 다시 눌러주세요."), { id: senderId }) : await trackAutomatedSend(user, sendCardDM(user.access_token, { id: senderId }, buildFollowGateCard({ gate: content.follow_gate, username: user.username, ruleId: match.id, title: "아직 팔로우가 확인되지 않았어요", subtitle: `@${user.username} 팔로우 후 버튼을 다시 눌러주세요.` })), { id: senderId })
                           const conv = await incomingSaved
                           if (result?.ok && conv) {
                             try {
@@ -778,11 +770,11 @@ export async function POST(request: NextRequest) {
                                                   if (attempts > UNLOCK_GATE_MAX_ATTEMPTS) {
                                                     await clearUnlockAttempts(attemptKey)
                                                     console.warn(`[webhook] ⚠️ DM unlock gate capped after ${attempts} unverifiable attempts for @${senderId} / rule ${match.id}`)
-                                                    const result = await sendTextDM(
+                                                    const result = await trackAutomatedSend(user, sendTextDM(
                                                       user.access_token,
                                                       { id: senderId },
                                                       "지금 팔로우 상태를 확인할 수 없어요. 잠시 후 다시 시도해주세요.",
-                                                    )
+                                                    ), { id: senderId })
                                                     const conv = await incomingSaved
                                                     if (result?.ok && conv) {
                                                       try {
@@ -801,7 +793,7 @@ export async function POST(request: NextRequest) {
                                                     }
                                                   } else {
                                                     console.warn(`[webhook] ⚠️ DM unlock unverifiable (attempt ${attempts}/${UNLOCK_GATE_MAX_ATTEMPTS}) for @${senderId}`)
-                                                    const result = content.follow_gate?.message?.trim() ? await sendTextDM(user.access_token, { id: senderId }, "지금 팔로우 상태를 확인할 수 없어요. 잠시 후 위 확인 버튼을 다시 눌러주세요.") : await sendCardDM(user.access_token, { id: senderId }, buildFollowGateCard({ gate: content.follow_gate, username: user.username, ruleId: match.id, subtitle: `Please follow @${user.username} to see this!` }))
+                                                    const result = content.follow_gate?.message?.trim() ? await trackAutomatedSend(user, sendTextDM(user.access_token, { id: senderId }, "지금 팔로우 상태를 확인할 수 없어요. 잠시 후 위 확인 버튼을 다시 눌러주세요."), { id: senderId }) : await trackAutomatedSend(user, sendCardDM(user.access_token, { id: senderId }, buildFollowGateCard({ gate: content.follow_gate, username: user.username, ruleId: match.id, subtitle: `Please follow @${user.username} to see this!` })), { id: senderId })
                                                     const conv = await incomingSaved
                                                     if (result?.ok && conv) {
                                                       try {
@@ -827,7 +819,7 @@ export async function POST(request: NextRequest) {
                                                 if (followResult.follows === true) {
                           await clearUnlockAttempts(attemptKey)
                           console.log(`[webhook] ✅ DM follower gate: @${senderId} follows @${user.username} — sending content`)
-                          const result = await sendAutomationResponse(user.access_token, { id: senderId }, content)
+                          const result = await sendAutomationResponse(user.access_token, { id: senderId }, content, {}, user)
                           const conv = await incomingSaved
                           if (result?.ok && conv) {
                             try {
@@ -847,7 +839,7 @@ export async function POST(request: NextRequest) {
                         } else if (followResult.follows === false) {
                           await clearUnlockAttempts(attemptKey)
                           console.log(`[webhook] 🔒 DM follower gate: @${senderId} doesn't follow @${user.username}`)
-                          const result = await sendCardDM(user.access_token, { id: senderId }, buildFollowGateCard({ gate: content.follow_gate, username: user.username, ruleId: match.id, subtitle: `Please follow @${user.username} to see this!` }))
+                          const result = await trackAutomatedSend(user, sendCardDM(user.access_token, { id: senderId }, buildFollowGateCard({ gate: content.follow_gate, username: user.username, ruleId: match.id, subtitle: `Please follow @${user.username} to see this!` })), { id: senderId })
                           const conv = await incomingSaved
                           if (result?.ok && conv) {
                             try {
@@ -870,7 +862,7 @@ export async function POST(request: NextRequest) {
                           // Only transient 5xx/timeouts keep content locked and deliver content.
 
                             console.warn(`[webhook] ⚠️ DM follower gate verification unavailable for @${senderId}; sending gate`)
-                            const result = await sendCardDM(user.access_token, { id: senderId }, buildFollowGateCard({ gate: content.follow_gate, username: user.username, ruleId: match.id, title: "❌ Verification Failed", subtitle: `We can't verify your follow status. Please follow @${user.username} and try again.` }))
+                            const result = await trackAutomatedSend(user, sendCardDM(user.access_token, { id: senderId }, buildFollowGateCard({ gate: content.follow_gate, username: user.username, ruleId: match.id, title: "❌ Verification Failed", subtitle: `We can't verify your follow status. Please follow @${user.username} and try again.` })), { id: senderId })
                             const conv = await incomingSaved
                             if (result?.ok && conv) {
                               try {
@@ -892,7 +884,7 @@ export async function POST(request: NextRequest) {
                       }
                     } else {
                       // No follower check required
-                      const result = await sendAutomationResponse(user.access_token, { id: senderId }, content)
+                      const result = await sendAutomationResponse(user.access_token, { id: senderId }, content, {}, user)
                       const conv = await incomingSaved
                       if (result?.ok && conv) {
                         try {
