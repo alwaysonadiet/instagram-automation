@@ -53,30 +53,51 @@ BEGIN
  IF length(t)<80 AND (t ~ '(감사|고맙|좋은.*(하루|주말|저녁)|즐거운.*(주말|하루)|안녕하세요|안녕하세용|수고하세요|고생하세요)' OR compact ~ '^(네|넵|넹|예|응|오케이|ok|okay|thankyou|thanks|ㅎㅎ|ㅋㅋ)+$') THEN RETURN 'courtesy'; END IF;
  RETURN 'unclear';
 END$$;
+-- Customer-only read path: no outbound template matching or second archive join.
 CREATE OR REPLACE VIEW public.ci_evidence_messages WITH(security_invoker=true) AS
- SELECT m.*,CASE WHEN m.quality_kind IN ('reaction','trigger','keyword_only') THEN '[]'::jsonb ELSE coalesce(h.feedback_signals,ci_extract_signals(m.text)) END AS signals
- FROM public.ci_messages m LEFT JOIN public.ci_history_index h ON h.user_id=m.user_id AND m.event_key='history:'||h.source_key
- WHERE m.kind='customer';
+WITH incoming AS (
+ SELECT h.user_id,'history:'||h.source_key AS event_key,coalesce('api:'||h.linked_conversation_id::text,'export:'||h.thread_key) AS customer_key,h.thread_key AS label,h.sent_at AS occurred_at,h.direction,h.display_text AS text,h.original_text,h.attachments,'customer'::text AS kind,'export'::text AS source,h.feedback_kind,h.feedback_signals AS derived_signals
+ FROM ci_history_index h WHERE h.direction='incoming' AND NOT starts_with(h.display_text,'Instagram 게시물의 댓글에 비공개 답장을 보냈습니다') AND NOT starts_with(h.display_text,'You sent a private reply') AND NOT starts_with(h.display_text,'You unsent a message') AND NOT starts_with(h.display_text,'메시지를 보내지 않았습니다')
+ AND NOT EXISTS(SELECT 1 FROM messages m WHERE m.user_id=h.user_id AND m.id=h.meta_message_id)
+ AND NOT(CASE WHEN h.linked_conversation_id IS NOT NULL AND length(h.display_text)>=10 THEN
+ (SELECT count(*) FROM messages m WHERE m.user_id=h.user_id AND m.conversation_id=h.linked_conversation_id AND m.content=h.display_text
+ AND m.is_from_instagram=(h.direction='incoming') AND m.created_at BETWEEN h.sent_at-interval '2 seconds' AND h.sent_at+interval '2 seconds')=1
+ AND (SELECT count(*) FROM ci_history_index other WHERE other.user_id=h.user_id AND other.linked_conversation_id=h.linked_conversation_id
+ AND other.display_text=h.display_text AND other.direction=h.direction AND other.sent_at BETWEEN h.sent_at-interval '4 seconds' AND h.sent_at+interval '4 seconds')=1
+ ELSE false END)
+ UNION ALL
+ SELECT m.user_id,'api:'||m.id,'api:'||m.conversation_id::text,coalesce(c.recipient_username,c.recipient_id),m.created_at,'incoming',m.content,m.content,coalesce(m.attachments,'[]'::jsonb),'customer','api',ci_feedback_kind(m.content),ci_extract_signals(m.content)
+ FROM messages m JOIN conversations c ON c.id=m.conversation_id AND c.user_id=m.user_id WHERE m.is_from_instagram AND m.content NOT LIKE 'ACT::%' AND m.content<>'[자동화 버튼 클릭]'
+), classified AS (
+ SELECT incoming.*,CASE WHEN EXISTS(SELECT 1 FROM automations a WHERE a.user_id=incoming.user_id AND a.trigger_type='keyword' AND lower(trim(a.trigger_value))=lower(trim(incoming.text))) THEN 'trigger' WHEN feedback_kind='unclear' AND EXISTS(SELECT 1 FROM ci_keyword_only k WHERE k.user_id=incoming.user_id AND k.token=lower(trim(incoming.text))) THEN 'keyword_only' ELSE feedback_kind END AS quality_kind FROM incoming
+)
+SELECT user_id,event_key,customer_key,label,occurred_at,direction,text,original_text,attachments,kind,source,feedback_kind,quality_kind,CASE WHEN quality_kind IN ('reaction','trigger','keyword_only') THEN '[]'::jsonb ELSE derived_signals END AS signals FROM classified;
 REVOKE ALL ON public.ci_evidence_messages FROM PUBLIC,anon,authenticated;
 GRANT SELECT ON public.ci_evidence_messages TO service_role;
+
 CREATE OR REPLACE FUNCTION public.ci_evidence_library(p_owner bigint,p_days integer DEFAULT 0,p_product text DEFAULT NULL,p_scope text DEFAULT 'marketing',p_search text DEFAULT '',p_offset integer DEFAULT 0,p_topic text DEFAULT NULL) RETURNS jsonb
-LANGUAGE sql STABLE SECURITY INVOKER SET search_path=public SET jit=off SET work_mem='16MB' AS $$
+LANGUAGE plpgsql STABLE SECURITY INVOKER SET search_path=public SET jit=off SET work_mem='16MB' SET plan_cache_mode='force_custom_plan' AS $$
+DECLARE payload jsonb; BEGIN
+ -- Bind request values before planning; do not concatenate user input.
+ EXECUTE $ci_query$
 WITH owned AS MATERIALIZED (
- SELECT event_key,customer_key,text,quality_kind,occurred_at,signals,jsonb_array_length(attachments) AS attachment_count FROM ci_evidence_messages WHERE user_id=p_owner
- AND (p_days=0 OR occurred_at>=now()-make_interval(days=>least(greatest(p_days,1),3650)))
- AND (p_product IS NULL OR EXISTS(SELECT 1 FROM ci_products p,unnest(p.keywords) w WHERE p.user_id=p_owner AND p.product_key=p_product AND text ILIKE '%'||w||'%'))
+ SELECT event_key,customer_key,text,quality_kind,occurred_at,signals,jsonb_array_length(attachments) AS attachment_count FROM ci_evidence_messages WHERE user_id=$1
+ AND ($2=0 OR occurred_at>=now()-make_interval(days=>least(greatest($2,1),3650)))
+ AND ($3 IS NULL OR EXISTS(SELECT 1 FROM ci_products p,unnest(p.keywords) w WHERE p.user_id=$1 AND p.product_key=$3 AND text ILIKE '%'||w||'%'))
 ), matched AS MATERIALIZED (
- SELECT *, (SELECT jsonb_agg(s) FROM jsonb_array_elements(signals) s WHERE CASE p_scope
+ SELECT *, (SELECT jsonb_agg(s) FROM jsonb_array_elements(signals) s WHERE CASE $4
  WHEN 'testimonial' THEN s->>'kind'='testimonial' WHEN 'progress' THEN s->>'kind' IN ('progress','feedback')
  WHEN 'support' THEN s->>'kind'='support' WHEN 'objection' THEN s->>'kind'='objection'
  ELSE s->>'kind' IN ('problem','desire','objection','question') END) AS selected_signals
- FROM owned WHERE (p_search='' OR strpos(lower(text),lower(p_search))>0)
- AND (p_topic IS NULL OR text ~ CASE p_topic WHEN 'item' THEN '(아이템|카테고리|뭘.?만들|뭘.?팔)' WHEN 'execution' THEN '(실행|시작|미루|완벽|결정)' WHEN 'beginner' THEN '(초보|실력|따라갈|자신)' WHEN 'time' THEN '(시간|육아|직장|과제)' WHEN 'price' THEN '(가격|금액|부담|할부|수입|수강료)' WHEN 'etsy' THEN '(입점|정지|엣시|etsy)' WHEN 'sales' THEN '(판매|매출|수익|주문)' WHEN 'research' THEN '(시장조사|디자인|캔바)' WHEN 'access' THEN '(다운로드|로그인|파일|접속|환불|취소)' WHEN 'schedule' THEN '(언제|기간|오픈|재입고|신청|구매)' WHEN 'automation' THEN '(인디자인|하이퍼링크|자동화|툴)' WHEN 'choice' THEN '(차이|강의|상품|패키지|노트|키트)' ELSE '(?!)' END)
-), eligible AS MATERIALIZED (SELECT * FROM matched WHERE selected_signals IS NOT NULL OR p_scope='all'), page AS (
+ FROM owned WHERE ($5='' OR strpos(lower(text),lower($5))>0)
+ AND ($7 IS NULL OR text ~ CASE $7 WHEN 'item' THEN '(아이템|카테고리|뭘.?만들|뭘.?팔)' WHEN 'execution' THEN '(실행|시작|미루|완벽|결정)' WHEN 'beginner' THEN '(초보|실력|따라갈|자신)' WHEN 'time' THEN '(시간|육아|직장|과제)' WHEN 'price' THEN '(가격|금액|부담|할부|수입|수강료)' WHEN 'etsy' THEN '(입점|정지|엣시|etsy)' WHEN 'sales' THEN '(판매|매출|수익|주문)' WHEN 'research' THEN '(시장조사|디자인|캔바)' WHEN 'access' THEN '(다운로드|로그인|파일|접속|환불|취소)' WHEN 'schedule' THEN '(언제|기간|오픈|재입고|신청|구매)' WHEN 'automation' THEN '(인디자인|하이퍼링크|자동화|툴)' WHEN 'choice' THEN '(차이|강의|상품|패키지|노트|키트)' ELSE '(?!)' END)
+), eligible AS MATERIALIZED (SELECT * FROM matched WHERE selected_signals IS NOT NULL OR $4='all'), page AS (
  SELECT event_key,customer_key,text,quality_kind,occurred_at,coalesce(selected_signals,signals) AS signals,attachment_count
- FROM eligible ORDER BY occurred_at DESC,event_key DESC LIMIT 25 OFFSET least(greatest(p_offset,0),100000)
+ FROM eligible ORDER BY occurred_at DESC,event_key DESC LIMIT 25 OFFSET least(greatest($6,0),100000)
 )
 SELECT jsonb_build_object('total',(SELECT count(*) FROM eligible),'items',coalesce((SELECT jsonb_agg(to_jsonb(p)) FROM page p),'[]'),'media_unread',(SELECT count(*) FROM owned WHERE attachment_count>0),'scope_counts',(SELECT coalesce(jsonb_object_agg(k,n),'{}') FROM (SELECT s->>'kind' AS k,count(distinct event_key) n FROM owned CROSS JOIN LATERAL jsonb_array_elements(signals) s GROUP BY s->>'kind') counts));
-$$;
+$ci_query$ INTO payload USING p_owner,p_days,p_product,p_scope,p_search,p_offset,p_topic;
+ RETURN payload;
+END$$;
 REVOKE ALL ON FUNCTION public.ci_evidence_library(bigint,integer,text,text,text,integer,text) FROM PUBLIC,anon,authenticated;
 GRANT EXECUTE ON FUNCTION public.ci_evidence_library(bigint,integer,text,text,text,integer,text) TO service_role;
