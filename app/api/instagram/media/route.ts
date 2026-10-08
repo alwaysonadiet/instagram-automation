@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { getInstagramIdentity } from "@/lib/instagram-auth"
 import { getSupabaseServerClient } from "@/lib/supabase-server"
 
 export async function GET(request: NextRequest) {
@@ -8,6 +9,9 @@ export async function GET(request: NextRequest) {
 
     if (!userId) return NextResponse.json({ error: "Missing userId" }, { status: 400 })
 
+    const identity = await getInstagramIdentity()
+    if (!identity) return NextResponse.json({ error: "Please log in again" }, { status: 401 })
+    if (identity.userId !== userId) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     const supabase = await getSupabaseServerClient()
 
     // 1. Get Access Token
@@ -44,15 +48,17 @@ export async function GET(request: NextRequest) {
     }
 
     // Normalize: pick thumbnail_url for videos, media_url for images.
-    // Skips items with neither URL so we never return the broken `image_url: null` shape.
+    // Keep items without a thumbnail; the picker renders a placeholder.
     const normalized = (data.data || [])
       .map((m: any) => ({
         ...m,
         image_url: m.thumbnail_url || m.media_url || null,
       }))
-      .filter((m: any) => typeof m.image_url === "string" && m.image_url.length > 0)
 
-    return NextResponse.json({ data: normalized, next_cursor: data.paging?.next ? data.paging?.cursors?.after || null : null })
+    const nextCursor = data.paging?.next
+      ? data.paging?.cursors?.after || new URL(data.paging.next).searchParams.get("after")
+      : null
+    return NextResponse.json({ data: normalized, next_cursor: nextCursor && nextCursor !== after ? nextCursor : null })
   } catch (error) {
     console.error("[v0] Server Error:", error)
     return NextResponse.json({ error: "Server Error" }, { status: 500 })
