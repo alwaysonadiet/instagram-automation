@@ -1,7 +1,7 @@
 "use client"
 import { useRef, useState } from "react"
 import { readHistoryFile } from "@/lib/history/archive"
-import { normaliseExport, type HistoryMessage } from "@/lib/history/normalise"
+import { decodeMetaText, normaliseExport, type HistoryMessage } from "@/lib/history/normalise"
 
 export default function DataPage() {
   const [ownerNames, setOwnerNames] = useState("")
@@ -47,7 +47,7 @@ export default function DataPage() {
     } finally { setBusy(false) }
   }
   const total = files.reduce((n, f) => n + f.messages.length, 0)
-  const participants = Array.from(new Set(files.flatMap(f => f.messages.flatMap(m => m.participants))))
+  const participants = Array.from(new Set(files.flatMap(f => f.messages.flatMap(m => m.participants.map(decodeMetaText)))))
   return <div className="mx-auto max-w-4xl space-y-6 p-6">
     <div><h1 className="text-3xl font-semibold">Data</h1><p className="mt-2 text-muted-foreground">과거 Instagram DM을 원문 그대로 보관합니다.</p></div>
     <section className="space-y-4 rounded-xl border p-5">
@@ -63,7 +63,7 @@ export default function DataPage() {
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       {total > 0 && <><p>{files.length}개 파일 · {total.toLocaleString()}개 메시지</p>
         <p className="text-sm text-muted-foreground">참여자 이름 예시: {participants.slice(0, 10).join(", ")}</p>
-        <div className="space-y-2 rounded-lg bg-muted p-3">{files.flatMap(f => f.messages).slice(0, 5).map(m => <div key={`${m.sourcePath}:${m.key}`} className="text-sm"><p className="text-xs text-muted-foreground">{m.sender} · {m.timestamp}</p><p className="whitespace-pre-wrap break-words">{m.displayText || "[첨부파일 또는 시스템 이벤트]"}</p></div>)}</div>
+        <div className="space-y-2 rounded-lg bg-muted p-3">{files.flatMap(f => f.messages).slice(0, 5).map(m => <div key={`${m.sourcePath}:${m.key}`} className="text-sm"><p className="text-xs text-muted-foreground">{decodeMetaText(m.sender)} · {m.timestamp}</p><p className="whitespace-pre-wrap break-words">{m.displayText || "[첨부파일 또는 시스템 이벤트]"}</p></div>)}</div>
         <p className="text-sm">내 이름을 확인할 수 없으면 발신 방향은 미확인으로 저장됩니다. 고객 ID 연결 전까지 원문 보관함에 저장하며, 자동화는 실행하지 않습니다.</p>
         <button className="rounded-lg bg-primary px-4 py-2 text-primary-foreground disabled:opacity-50" disabled={busy} onClick={() => void save()}>{busy ? "처리 중…" : "원문 저장"}</button>
       </>}
