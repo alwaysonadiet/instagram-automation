@@ -1,10 +1,11 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Search, Loader2, MoreVertical, Mail, X } from "lucide-react"
+import { Search, Loader2, MoreVertical, Mail, MailOpen, Pin, PinOff, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem } from "@/components/ui/context-menu"
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu"
+import { SwipeConversation } from "./SwipeConversation"
 import { RecipientAvatar } from "./RecipientAvatar"
 import type { Conversation } from "@/types/db"
 
@@ -19,21 +20,27 @@ interface ConversationListProps {
 export function ConversationList({ onActionCompleted, userId, selectedId, onSelect, revision = 0 }: ConversationListProps) {
     const [conversations, setConversations] = useState<Conversation[]>([])
     const [loading, setLoading] = useState(true)
+    const [search, setSearch] = useState("")
+    const query = search.trim().replace(/^@/, "").normalize("NFKC").toLocaleLowerCase()
+    const visibleConversations = [...conversations].sort((a, b) => Number(!!b.is_pinned) - Number(!!a.is_pinned) || Date.parse(b.last_message_at) - Date.parse(a.last_message_at)).filter(conv => !query || [conv.recipient_username, conv.recipient_display_name, conv.last_message_preview].some(value => (value || "").normalize("NFKC").toLocaleLowerCase().includes(query)))
 
     const [busyId, setBusyId] = useState<string | null>(null)
     const [actionError, setActionError] = useState("")
     const [menuId, setMenuId] = useState<string | null>(null)
-    async function act(conv: Conversation, action: "unread" | "close") {
+    const [dropdownId, setDropdownId] = useState<string | null>(null)
+    async function act(conv: Conversation, action: "read" | "unread" | "close" | "pin") {
         if (busyId) return
+        if (action === "close" && !window.confirm(`@${conv.recipient_username} 대화를 삭제할까요? 이 앱의 메시지 기록만 삭제되며 인스타그램 원본 DM은 그대로 남아요.`)) return
         setBusyId(conv.id); setActionError("")
         try {
             const response = await fetch(action === "close" ? `/api/inbox/conversations?conversationId=${encodeURIComponent(conv.id)}` : "/api/inbox/conversations", {
                 method: action === "close" ? "DELETE" : "PATCH",
-                ...(action === "unread" ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify({ conversationId: conv.id, isUnread: true }) } : {}),
+                ...(action !== "close" ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify(action === "pin" ? { conversationId: conv.id, isPinned: !conv.is_pinned } : { conversationId: conv.id, isUnread: action === "unread", ...(action === "read" ? { readThrough: conv.last_incoming_at || conv.last_message_at } : {}) }) } : {}),
             })
             if (!response.ok) throw new Error()
-            setConversations(previous => action === "close" ? previous.filter(value => value.id !== conv.id) : previous.map(value => value.id === conv.id ? { ...value, is_unread: true } : value))
-            onActionCompleted?.(conv.id)
+            const result = await response.json()
+            setConversations(previous => action === "close" ? previous.filter(value => value.id !== conv.id) : previous.map(value => value.id === conv.id ? action === "pin" ? { ...value, is_pinned: result.isPinned } : { ...value, is_unread: action === "unread" || (result.changed === false && value.is_unread) } : value))
+            if (action !== "pin") onActionCompleted?.(conv.id)
         } catch { setActionError("변경하지 못했어요. 다시 시도해주세요.") }
         finally { setBusyId(null) }
     }
@@ -86,25 +93,29 @@ export function ConversationList({ onActionCompleted, userId, selectedId, onSele
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <input
                         className="w-full bg-background border border-input rounded-xl pl-10 pr-4 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring transition-colors"
-                        placeholder="Search messages..."
+                        aria-label="대화 검색"
+                        value={search}
+                        onChange={event => setSearch(event.target.value)}
+                        placeholder="아이디, 이름, 최근 메시지 검색…"
                     />
                 </div>
             </div>
 
             {actionError && <p role="alert" className="px-4 py-2 text-sm text-destructive">{actionError}</p>}
             <div className="flex-1 overflow-y-auto p-2 space-y-1">
-                {conversations.length === 0 ? (
+                {visibleConversations.length === 0 ? (
                     <div className="text-center py-10 text-muted-foreground text-sm">
-                        진행 중인 대화가 없습니다.
+                        {query ? "검색 결과가 없어요." : "진행 중인 대화가 없습니다."}
                     </div>
                 ) : (
-                    conversations.map((conv) => (
-                        <ContextMenu key={conv.id} onOpenChange={open => setMenuId(open ? conv.id : null)}>
+                    visibleConversations.map((conv) => (
+                        <SwipeConversation key={conv.id} disabled={!!busyId} onLongPress={() => setDropdownId(conv.id)} onUnread={() => void act(conv, "unread")} onRead={() => void act(conv, "read")}>
+                        <ContextMenu onOpenChange={open => setMenuId(open ? conv.id : null)}>
                         <ContextMenuTrigger asChild>
                         <div
                             role="button" tabIndex={0}
                             onKeyDown={event => { if (event.target !== event.currentTarget) return; if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelect(conv.id, conv.recipient_username, conv.recipient_id, conv.recipient_display_name, conv.recipient_profile_pic) } }}
-                            onClick={() => { if (!menuId && !busyId) onSelect(conv.id, conv.recipient_username, conv.recipient_id.toString(), conv.recipient_display_name, conv.recipient_profile_pic) }}
+                            onClick={() => { if (!menuId && !dropdownId && !busyId) onSelect(conv.id, conv.recipient_username, conv.recipient_id.toString(), conv.recipient_display_name, conv.recipient_profile_pic) }}
                             className={cn(
                                 "select-none [-webkit-touch-callout:none] p-3 rounded-lg flex items-center gap-3 cursor-pointer transition-colors border border-transparent",
                                 selectedId === conv.id
@@ -121,18 +132,21 @@ export function ConversationList({ onActionCompleted, userId, selectedId, onSele
                                     )}>
                                         @{conv.recipient_username}
                                     </span>
+                                    {conv.is_pinned && <Pin className="size-3 shrink-0 mx-1 text-primary" aria-label="고정된 대화" />}
                                     {conv.is_unread && <span className="size-2 rounded-full bg-blue-500 shrink-0 mx-2" role="img" aria-label="읽지 않은 메시지" title="읽지 않음" />}
                                     <span className="text-[10px] text-muted-foreground whitespace-nowrap">
                                         {dateLabel(conv.last_message_at)}
                                     </span>
                                 </div>
                                 <p className="text-xs text-muted-foreground truncate">
-                                    {conv.recipient_display_name || "대화 보기"}
+                                    {conv.last_message_preview || conv.recipient_display_name || "대화 보기"}
                                 </p>
                             </div>
-                            <DropdownMenu>
+                            <DropdownMenu open={dropdownId === conv.id} onOpenChange={open => setDropdownId(open ? conv.id : null)}>
                                 <DropdownMenuTrigger asChild><button type="button" aria-label={`@${conv.recipient_username} 대화 메뉴`} onClick={event => event.stopPropagation()} onPointerDown={event => event.stopPropagation()} className="p-2 shrink-0 rounded hover:bg-muted"><MoreVertical className="size-4" /></button></DropdownMenuTrigger>
                                 <DropdownMenuContent onClick={event => event.stopPropagation()}>
+                                    <DropdownMenuItem disabled={!!busyId} onSelect={() => void act(conv, "pin")}>{conv.is_pinned ? <PinOff /> : <Pin />}{conv.is_pinned ? "고정 해제" : "상단 고정"}</DropdownMenuItem>
+                                    <DropdownMenuItem disabled={!!busyId} onSelect={() => void act(conv, "read")}><MailOpen />읽음으로 표시</DropdownMenuItem>
                                     <DropdownMenuItem disabled={!!busyId} onSelect={() => void act(conv, "unread")}><Mail />읽지 않음으로 표시</DropdownMenuItem>
                                     <DropdownMenuItem disabled={!!busyId} onSelect={() => void act(conv, "close")}><X />대화 닫기 · 기록 삭제</DropdownMenuItem>
                                 </DropdownMenuContent>
@@ -141,10 +155,12 @@ export function ConversationList({ onActionCompleted, userId, selectedId, onSele
                         </div>
                         </ContextMenuTrigger>
                         <ContextMenuContent onClick={event => event.stopPropagation()}>
+                            <ContextMenuItem disabled={!!busyId} onSelect={() => void act(conv, "pin")}>{conv.is_pinned ? <PinOff className="size-4 mr-2" /> : <Pin className="size-4 mr-2" />}{conv.is_pinned ? "고정 해제" : "상단 고정"}</ContextMenuItem>
                             <ContextMenuItem disabled={!!busyId} onSelect={() => void act(conv, "unread")}><Mail className="size-4 mr-2" />읽지 않음으로 표시</ContextMenuItem>
                             <ContextMenuItem disabled={!!busyId} onSelect={() => void act(conv, "close")}><X className="size-4 mr-2" />대화 닫기 · 기록 삭제</ContextMenuItem>
                         </ContextMenuContent>
                         </ContextMenu>
+                        </SwipeConversation>
                     ))
                 )}
             </div>
