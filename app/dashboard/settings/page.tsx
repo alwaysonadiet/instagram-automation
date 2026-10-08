@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { Save, Loader2, Check } from "lucide-react"
+import { PublicReplyDefaults } from "@/components/dashboard/PublicReplyDefaults"
 import { useInstagramSession } from "@/hooks/use-instagram-session"
 
 const fields = [
@@ -54,6 +55,7 @@ export default function SettingsPage() {
                 <h1 className="mt-1 text-3xl font-semibold tracking-[-0.03em] text-foreground">Preferences</h1>
                 <p className="mt-2 text-sm text-muted-foreground">Give your assistant accurate business information for better replies.</p>
             </div>
+            <PublicReplyDefaults />
             <div className="mt-7 space-y-5 rounded-xl border border-border bg-card p-6">
                 {fields.map(([key, label, placeholder]) => (
                     <label key={key} className="block space-y-2">
