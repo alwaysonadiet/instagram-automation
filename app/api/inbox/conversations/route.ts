@@ -14,6 +14,18 @@ export async function GET(request: NextRequest) {
 
         const supabase = await getSupabaseServerClient()
 
+        const profileIds = request.nextUrl.searchParams.get("profiles")
+        if (profileIds) {
+            const ids = [...new Set(profileIds.split(","))].filter(id => /^\d+$/.test(id)).slice(0, 8)
+            const { data: owned } = await supabase.from("conversations").select("recipient_id,recipient_username").eq("user_id", userId).in("recipient_id", ids)
+            const { data: user } = await supabase.from("users").select("access_token").eq("id", identity.userId).single()
+            if (!user?.access_token) return NextResponse.json([])
+            return NextResponse.json(await Promise.all((owned || []).map(async conversation => {
+                const profile = await fetchProfile(user.access_token, String(conversation.recipient_id))
+                return { recipient_id: String(conversation.recipient_id), recipient_username: profile?.username || conversation.recipient_username, recipient_display_name: profile?.name || null, recipient_profile_pic: profile?.profile_pic?.startsWith("https://") ? profile.profile_pic : null }
+            })))
+        }
+
         // Fetch conversations sorted by last message
         const { data: conversations, error } = await supabase
             .from("conversations")
@@ -33,23 +45,7 @@ export async function GET(request: NextRequest) {
             const text = latest?.content?.trim() || (latest?.attachments?.length ? "[첨부파일]" : "")
             return { ...conversation, last_message_preview: text ? `${latest?.is_from_instagram ? "" : "나: "}${text}`.replace(/\s+/g, " ").slice(0, 240) : "" }
         })
-        if (!rows.length) return NextResponse.json(rows)
-        const { data: user } = await supabase.from("users").select("access_token").eq("id", identity.userId).single()
-        if (!user?.access_token) return NextResponse.json(rows)
-        // Profile responses are cached for a day; no background polling or photo uploads.
-        const enriched = []
-        for (let offset = 0; offset < rows.length; offset += 8) {
-            enriched.push(...await Promise.all(rows.slice(offset, offset + 8).map(async conversation => {
-                const profile = await fetchProfile(user.access_token, String(conversation.recipient_id))
-                return {
-                    ...conversation,
-                    recipient_username: profile?.username || conversation.recipient_username,
-                    recipient_display_name: profile?.name || null,
-                    recipient_profile_pic: profile?.profile_pic?.startsWith("https://") ? profile.profile_pic : null,
-                }
-            })))
-        }
-        return NextResponse.json(enriched)
+        return NextResponse.json(rows)
     } catch (error) {
         console.error("[Inbox] Conversations GET error:", error)
         return NextResponse.json({ error: "Failed to fetch conversations" }, { status: 500 })
