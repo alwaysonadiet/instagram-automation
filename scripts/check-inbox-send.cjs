@@ -10,7 +10,7 @@ async function run(echoFirst) {
     const q = {
       select() { return q }, eq(key, value) { if (key === 'id') id = value; return q },
       async single() { return { data: table === 'users' ? { access_token: 'test', username: 'me', business_account_id: 'owner' } : table === 'conversations' ? { id: 'conv' } : rows.get(id) } },
-      async upsert(row, opts) { assert.equal(opts.ignoreDuplicates, true); assert.equal(row.id, 'ig-mid'); if (!rows.has(row.id)) rows.set(row.id, row); return { error: null } },
+      async upsert(row, opts) { assert.equal(opts.ignoreDuplicates, true); if(table === 'message_provenance') { assert.equal(row.meta_message_id,'ig-mid'); assert.equal(row.delivery_kind,'manual'); assert.equal(row.user_id,'owner'); return {error:null} };  assert.equal(row.id, 'ig-mid'); if (!rows.has(row.id)) rows.set(row.id, row); return { error: null } },
       update() { return q }, then(resolve) { resolve({ error: null }) }
     }
     return q
