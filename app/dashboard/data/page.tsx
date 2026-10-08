@@ -1,6 +1,8 @@
 "use client"
+import { uploadHistoryBatch } from "@/lib/history/upload"
 import { HistoryArchive } from "@/components/history/HistoryArchive"
-import { useRef, useState } from "react"
+import { intelligenceFetch } from "@/lib/intelligence/client"
+import { useEffect, useRef, useState } from "react"
 import { readHistoryFile } from "@/lib/history/archive"
 import { decodeMetaText, normaliseExport, type HistoryMessage } from "@/lib/history/normalise"
 
@@ -12,6 +14,7 @@ export default function DataPage() {
   const [status, setStatus] = useState("")
   const [error, setError] = useState("")
   const fileInput = useRef<HTMLInputElement>(null)
+  useEffect(() => { let active = true; intelligenceFetch("/api/history/config").then(data => { if (active) setOwnerNames((data.settings.owner_names || []).join("\n")) }).catch(() => {}); return () => { active = false } }, [])
   const names = ownerNames.split("\n").map(v => v.trim()).filter(Boolean)
   async function preview(file?: File) {
     if (!file || busy) return
@@ -26,28 +29,29 @@ export default function DataPage() {
   }
   async function save() {
     setBusy(true); setError("")
-    let inserted = 0, duplicates = 0
+    let inserted = 0, duplicates = 0, processed = 0
+    const started = Date.now()
+    const total = files.reduce((n, f) => n + f.messages.length, 0)
+    const progress = () => { const seconds = (Date.now() - started) / 1000; const eta = processed ? Math.ceil(seconds / processed * (total - processed)) : null; setStatus(`원문 저장 ${processed.toLocaleString()} / ${total.toLocaleString()}개 (${Math.round(processed / total * 100)}%) · 신규 ${inserted.toLocaleString()} · 중복 ${duplicates.toLocaleString()} · 경과 ${Math.round(seconds)}초 · 남은 시간 ${eta === null ? "계산 중" : eta + "초"}`) }
     try {
       for (const entry of files) {
         const messages = await normaliseExport(entry.data, entry.path, names)
         const metadata = entry.data as Record<string, unknown>
-        for (let offset = 0; offset < messages.length; offset += 100) {
-          const batch = messages.slice(offset, offset + 100)
-          const res = await fetch("/api/history/import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
+        for (let offset = 0; offset < messages.length; offset += 10) {
+          const batch = messages.slice(offset, offset + 10)
+          const result = await uploadHistoryBatch({
             sourcePath: entry.path, ownerNames: names, occurrences: batch.map(m => m.occurrence),
             data: { ...metadata, messages: batch.map(m => m.original) },
-          }) })
-          const result = await res.json()
-          if (!res.ok) throw new Error(result.error || "저장하지 못했습니다.")
+          }, attempt => setStatus(`연결 재시도 ${attempt}/4 · ${processed.toLocaleString()} / ${total.toLocaleString()}개 처리됨`))
           inserted += result.inserted; duplicates += result.duplicates
-          setStatus(`${inserted.toLocaleString()}개 저장 · ${duplicates.toLocaleString()}개 중복 건너뜀`)
+          processed += batch.length; progress()
         }
       }
       setRevision(v => v + 1)
       setStatus(`완료: ${inserted.toLocaleString()}개 저장 · ${duplicates.toLocaleString()}개 중복 건너뜀`)
     } catch (e) {
       setError(`${e instanceof Error ? e.message : "저장하지 못했습니다."} 이미 저장된 메시지는 유지됩니다. 같은 파일로 다시 시도할 수 있어요.`)
-    } finally { setBusy(false) }
+    } finally { setRevision(v => v + 1); setBusy(false) }
   }
   async function correctDirections() {
     if (!names.length || busy) return
