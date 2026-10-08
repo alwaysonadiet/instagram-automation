@@ -39,6 +39,7 @@ export interface ResponseContent {
   public_replies?: string[]
   include_replies?: boolean
   // Delivery options
+  delay_random?: boolean
   delay_seconds?: number
   typing_indicator?: boolean
   mark_seen?: boolean
