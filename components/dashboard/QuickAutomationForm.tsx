@@ -64,6 +64,24 @@ export function QuickAutomationForm({ userId, initialSource, onSuccess, editRule
     }).catch(() => {})
     return () => { active = false }
   }, [editRule])
+  const [defaultsBusy, setDefaultsBusy] = useState(false)
+  const [defaultsStatus, setDefaultsStatus] = useState("")
+  const [defaultsError, setDefaultsError] = useState("")
+  async function manageDefaults(saveCurrent: boolean) {
+    if (defaultsBusy) return
+    setDefaultsBusy(true); setDefaultsStatus(""); setDefaultsError("")
+    try {
+      const replies = publicReplies.split("\n").map(value => value.trim()).filter(Boolean)
+      const response = await fetch("/api/public-reply-defaults", saveCurrent ? {
+        method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ replies })
+      } : undefined)
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || "기본 문구를 처리하지 못했어요.")
+      if (!saveCurrent) setPublicReplies(data.replies.join("\n"))
+      setDefaultsStatus(saveCurrent ? "기본 문구로 저장했어요. 새 자동화에 사용할 수 있어요." : "저장된 기본 문구를 불러왔어요.")
+    } catch (error) { setDefaultsError(error instanceof Error ? error.message : "처리하지 못했어요.") }
+    finally { setDefaultsBusy(false) }
+  }
   const [buttons, setButtons] = useState<{ title: string; url: string }[]>((existing.buttons || []).filter(button => button.type === "web_url").map(button => ({ title: button.title, url: button.url || "" })))
   const [checkFollow, setCheckFollow] = useState(existing.check_follow === true)
   const [followGate, setFollowGate] = useState({ message: "자료를 받으려면 먼저 팔로우해주세요 💌\n팔로우 후 아래 버튼을 눌러주세요.", not_following_message: "아직 팔로우가 확인되지 않았어요. 팔로우 후 위 버튼을 다시 눌러주세요.", confirm_button: "팔로우 했어요 ✅", ...existing.follow_gate })
@@ -196,7 +214,12 @@ export function QuickAutomationForm({ userId, initialSource, onSuccess, editRule
       {comment && replyMode !== "dm_only" && <section className="block border-t border-border p-4">
         <span className="text-sm font-medium">대댓글 문구 여러 개</span>
         <p className="mt-1 text-xs text-muted-foreground">한 줄에 문구 하나씩 적어주세요. 같은 키워드에도 매번 목록에서 하나를 무작위로 골라 답장합니다.</p>
-        <button type="button" onClick={() => setPublicReplies(DEFAULT_REPLIES.join("\n"))} className="mt-2 block text-sm underline">기본 문구 불러오기</button>
+        <div className="mt-2 flex flex-wrap gap-4 text-sm">
+          <button type="button" disabled={defaultsBusy} onClick={() => void manageDefaults(false)} className="underline disabled:opacity-50">기본 문구 불러오기</button>
+          <button type="button" disabled={defaultsBusy || !publicReplies.trim()} onClick={() => void manageDefaults(true)} className="underline disabled:opacity-50">{defaultsBusy ? "처리 중…" : "기본문구로 저장하기"}</button>
+        </div>
+        <p role="status" className="mt-2 text-xs text-muted-foreground">{defaultsStatus}</p>
+        {defaultsError && <p role="alert" className="mt-2 text-xs text-destructive">{defaultsError}</p>}
         <textarea aria-label="대댓글 문구 여러 개" required rows={7} value={publicReplies} onChange={event => setPublicReplies(event.target.value)} placeholder={"DM으로 보내드렸어요 💌\n메시지함을 확인해주세요 😊\n자료 보내드렸습니다!"} className={field + " mt-2"} />
       </section>}
       {hasDM && <div className="border-t border-border p-4 space-y-3">
