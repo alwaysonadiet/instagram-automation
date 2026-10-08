@@ -604,6 +604,7 @@ export async function POST(request: NextRequest) {
                 sender_username: outgoing ? user.username : "User",
                 content: event.postback?.title || event.message?.text || attachmentLabel || (triggerType === "postback" ? "[자동화 버튼 클릭]" : triggerValue),
                 attachments,
+                created_at: Number.isFinite(event.timestamp) && event.timestamp > 0 && event.timestamp < Date.now() + 300000 ? new Date(event.timestamp).toISOString() : new Date().toISOString(),
                 is_from_instagram: !outgoing,
               })
               if (messageError && messageError.code !== "23505") throw messageError
