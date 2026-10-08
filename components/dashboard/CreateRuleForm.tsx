@@ -11,6 +11,7 @@ import {
 import { TagInput } from "@/components/ui/tag-input"
 import type { ProButton, QuickReplyOption, Automation } from "@/lib/types"
 import { toast } from "sonner"
+import { DEFAULT_PUBLIC_REPLIES } from "@/lib/public-replies"
 
 /* ============================================================
    AESTHETIC & SEXY WIZARD FOR INSTAGRAM AUTOMATION RULES
@@ -55,7 +56,17 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
 
   /* ---------- Public comment reply ---------- */
   const [replyMode, setReplyMode] = useState<"both" | "dm_only" | "public_only">("both")
-  const [publicReplies, setPublicReplies] = useState<string[]>([])
+  const [publicReplies, setPublicReplies] = useState<string[]>([...DEFAULT_PUBLIC_REPLIES])
+  useEffect(() => {
+    if (editRule) return
+    let active = true
+    fetch("/api/public-reply-defaults").then(async r => {
+      if (!r.ok) return
+      const data = await r.json()
+      if (active && Array.isArray(data.replies)) setPublicReplies(previous => previous.join("\n") === DEFAULT_PUBLIC_REPLIES.join("\n") ? data.replies : previous)
+    }).catch(() => {})
+    return () => { active = false }
+  }, [editRule])
   const [includeReplies, setIncludeReplies] = useState(false)
 
   /* ---------- EXTRAS ---------- */
