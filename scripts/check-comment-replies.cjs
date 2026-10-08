@@ -20,11 +20,16 @@ function query(table) {
  }
  return q;
 }
+function loadTs(file, dependencies) { const output = ts.transpileModule(fs.readFileSync(path+'/'+file,'utf8'), {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText; const module={exports:{}}; new Function('require','module','exports',output)(n=>dependencies[n]||require(n),module,module.exports); return module.exports; }
+let provenance = [];
+const provenanceModule = loadTs('lib/message-provenance.ts', {'server-only':{}, '@/lib/supabase-server':{getSupabaseServerClient:async()=>({from:()=>({upsert:async(row)=>{provenance.push(row);return {error:null}}})})}});
 const mocks = {
+ '@/lib/public-replies':loadTs('lib/public-replies.ts',{}),
+ '@/lib/message-provenance':provenanceModule,
  'next/server':{NextResponse:{json:(data,opts)=>({data,status:opts?.status||200})}},
  '@/lib/supabase-server':{getSupabaseServerClient:async()=>({from:query})},
  '@/lib/supabase-migrate':{ensureSchema:async()=>{}},
- '@/lib/instagram-api':new Proxy({}, {get:(_target,name)=>async(...args)=>{if(name==='replyToComment') replies.push(args); if(name==='sendTextDM') dms.push(args); if(name==='sendCardDM') cards.push(args); if(name==='sendButtonDM') buttonMessages.push(args);return {ok:true}}}),
+ '@/lib/instagram-api':new Proxy({}, {get:(_target,name)=>async(...args)=>{if(name==='replyToComment') replies.push(args); if(name==='sendTextDM') dms.push(args); if(name==='sendCardDM') cards.push(args); if(name==='sendButtonDM') buttonMessages.push(args);return {ok:true,id:'sent-'+(++sent)}}}),
  '@/lib/ai-reply':{}, '@/lib/unlock-tracking':{unlockKey:()=> 'key',clearUnlockAttempts:async()=>{},bumpUnlockAttempt:async()=>1}
 };
 const source=fs.readFileSync(path+'/app/api/instagram/webhook/route.ts','utf8');
@@ -87,5 +92,7 @@ async function comment(text, media='carousel', parent=null){
   if(status===true) {assert.equal(dms.length,1);assert.equal(dms[0][2],'secret');assert.equal(buttonMessages.length,0)}
   else {assert.equal(dms.length,0);assert.equal(buttonMessages.length,1);assert.equal(buttonMessages[0][2],gate.message)}
  }
+ assert.ok(provenance.length > 0); assert.ok(provenance.every(row=>row.user_id===user.id && row.delivery_kind==='automation' && row.meta_message_id.startsWith('sent-')));
+ const before=provenance.length; const failed={ok:false}; assert.equal(await provenanceModule.trackAutomatedSend(user,Promise.resolve(failed),{id:'sender'}),failed); assert.equal(provenance.length,before);
  console.log('PASS: reel/carousel comment handling, reply variants, all comments, modes, keyword precedence and nested reply protection and existing-follower bypass and follower branches');
 })().catch(e=>{console.error(e);process.exitCode=1});
