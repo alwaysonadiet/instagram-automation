@@ -35,8 +35,9 @@ export async function runOneAnalysis(env: IntelligenceEnv) {
     const text = (typeof output === "string" ? output : JSON.stringify(output)).replace(/<think>[\s\S]*?<\/think>/g, "").replace(/^```(?:json)?\s*|\s*```$/g, "").trim()
     const insight = validateInsight(JSON.parse(text), job.messages)
     // Keep new messages pending if they arrived while the model was working.
-    const current = await dbRequest(env, `ci_jobs?${filter}&select=revision`) as { revision: number }[]
-    await dbRequest(env, `ci_jobs?${filter}`, { status: current[0]?.revision === job.revision ? "ready" : "pending", insight, model: MODEL, lease_until: null, last_error: null, updated_at: new Date().toISOString() }, "PATCH")
+    const result = { insight, model: MODEL, lease_until: null, last_error: null, updated_at: new Date().toISOString() }
+    await dbRequest(env, `ci_jobs?${filter}&revision=eq.${job.revision}`, { ...result, status: "ready" }, "PATCH")
+    await dbRequest(env, `ci_jobs?${filter}&revision=gt.${job.revision}`, { ...result, status: "pending" }, "PATCH")
     return { status: "ready" }
   } catch {
     await dbRequest(env, `ci_jobs?${filter}`, { status: "error", lease_until: null, last_error: "analysis_failed_or_invalid_evidence", updated_at: new Date().toISOString() }, "PATCH")
