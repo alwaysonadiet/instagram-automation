@@ -1,12 +1,14 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "instagram-automation-test",
-  "main": ".open-next/worker.js",
+  "main": "cloudflare/worker.ts",
   "compatibility_date": "2026-10-03",
   "compatibility_flags": [
     "nodejs_compat",
     "global_fetch_strictly_public"
   ],
+  "ai": { "binding": "CUSTOMER_AI" },
+  "triggers": { "crons": ["*/5 * * * *"] },
   "assets": {
     "directory": ".open-next/assets",
     "binding": "ASSETS"
