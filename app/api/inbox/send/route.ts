@@ -54,6 +54,11 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: data.error?.message || "Instagram send failed" }, { status: 500 })
         }
 
+        try { if (typeof data.message_id === "string") {
+            const { error } = await supabase.from("message_provenance").upsert({user_id:userId,meta_message_id:data.message_id,delivery_kind:"manual",recipient_id:recipientId},{onConflict:"user_id,meta_message_id",ignoreDuplicates:true})
+            if (error) console.error("[Inbox Send] Provenance save failed",error.code)
+        } } catch { console.error("[Inbox Send] Provenance save failed") }
+
         // 4. Log to Database (Outbound Message)
         // Find Conversation ID first
         let { data: conv } = await supabase
