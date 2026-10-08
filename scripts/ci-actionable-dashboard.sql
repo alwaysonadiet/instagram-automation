@@ -1,11 +1,14 @@
 CREATE OR REPLACE FUNCTION public.ci_dashboard_v2(p_owner bigint,p_product text DEFAULT NULL,p_days integer DEFAULT 0,p_scope text DEFAULT 'marketing') RETURNS jsonb
-LANGUAGE sql STABLE SECURITY INVOKER SET search_path=public SET jit=off SET work_mem='16MB' AS $$
+LANGUAGE plpgsql STABLE SECURITY INVOKER SET search_path=public SET jit=off SET work_mem='16MB' SET plan_cache_mode='force_custom_plan' AS $$
+DECLARE payload jsonb; BEGIN
+ -- Bind request values before planning; do not concatenate user input.
+ EXECUTE $ci_query$
 WITH owned AS MATERIALIZED (
- SELECT user_id,event_key,customer_key,label,occurred_at,direction,text,kind,quality_kind,signals FROM ci_evidence_messages WHERE user_id=p_owner
- AND (p_days=0 OR occurred_at>=now()-make_interval(days=>least(greatest(p_days,1),3650)))
- AND (p_product IS NULL OR EXISTS(SELECT 1 FROM ci_products p,unnest(p.keywords) w WHERE p.user_id=p_owner AND p.product_key=p_product AND text ILIKE '%'||w||'%'))
+ SELECT user_id,event_key,customer_key,label,occurred_at,direction,text,kind,quality_kind,signals FROM ci_evidence_messages WHERE user_id=$1
+ AND ($3=0 OR occurred_at>=now()-make_interval(days=>least(greatest($3,1),3650)))
+ AND ($2 IS NULL OR EXISTS(SELECT 1 FROM ci_products p,unnest(p.keywords) w WHERE p.user_id=$1 AND p.product_key=$2 AND text ILIKE '%'||w||'%'))
 ), signals AS MATERIALIZED (
- SELECT *, (SELECT jsonb_agg(s) FROM jsonb_array_elements(signals) s WHERE CASE p_scope WHEN 'support' THEN s->>'kind'='support' WHEN 'testimonial' THEN s->>'kind'='testimonial' WHEN 'progress' THEN s->>'kind' IN ('progress','feedback') WHEN 'objection' THEN s->>'kind'='objection' ELSE s->>'kind' IN ('problem','desire','objection','question') END) AS selected_signals FROM owned WHERE EXISTS(SELECT 1 FROM jsonb_array_elements(signals) s WHERE CASE p_scope WHEN 'support' THEN s->>'kind'='support' WHEN 'testimonial' THEN s->>'kind'='testimonial' WHEN 'progress' THEN s->>'kind' IN ('progress','feedback') WHEN 'objection' THEN s->>'kind'='objection' ELSE s->>'kind' IN ('problem','desire','objection','question') END)
+ SELECT *, (SELECT jsonb_agg(s) FROM jsonb_array_elements(signals) s WHERE CASE $4 WHEN 'support' THEN s->>'kind'='support' WHEN 'testimonial' THEN s->>'kind'='testimonial' WHEN 'progress' THEN s->>'kind' IN ('progress','feedback') WHEN 'objection' THEN s->>'kind'='objection' ELSE s->>'kind' IN ('problem','desire','objection','question') END) AS selected_signals FROM owned WHERE EXISTS(SELECT 1 FROM jsonb_array_elements(signals) s WHERE CASE $4 WHEN 'support' THEN s->>'kind'='support' WHEN 'testimonial' THEN s->>'kind'='testimonial' WHEN 'progress' THEN s->>'kind' IN ('progress','feedback') WHEN 'objection' THEN s->>'kind'='objection' ELSE s->>'kind' IN ('problem','desire','objection','question') END)
 ), rules(tag,title,pattern,next_action) AS (VALUES
  ('item','어떤 아이템으로 시작할지 모르겠어요','(아이템|카테고리|뭘.?만들|무엇을.?만들|뭘.?팔|주제.?선정)','선택 기준과 첫 상품 예시를 콘텐츠로 설명하세요.'),
  ('execution','알지만 시작·실행이 안 돼요','(미루|실행.*(못|안|어렵|정체)|시작.*(못|안|어렵)|손이.?안|완벽주의|결정을.?못)','작게 시작하는 방법과 오늘 할 행동을 보여주세요.'),
@@ -22,7 +25,7 @@ WITH owned AS MATERIALIZED (
 ), hits AS MATERIALIZED (
  SELECT s.event_key,s.customer_key,s.occurred_at,s.text,s.quality_kind,s.selected_signals,r.tag FROM signals s JOIN rules r ON EXISTS(SELECT 1 FROM jsonb_array_elements(s.selected_signals) e WHERE e->>'quote' ~ r.pattern)
 ), theme_orders AS (
- SELECT r.tag,p.order_key,p.currency,p.amount-p.refunded_amount AS amount FROM rules r JOIN ci_purchases p ON p.user_id=p_owner AND p.status='paid'
+ SELECT r.tag,p.order_key,p.currency,p.amount-p.refunded_amount AS amount FROM rules r JOIN ci_purchases p ON p.user_id=$1 AND p.status='paid'
  WHERE EXISTS(SELECT 1 FROM hits h WHERE h.tag=r.tag AND h.customer_key=p.customer_key AND h.occurred_at<=p.paid_at AND h.occurred_at>=p.paid_at-interval '30 days')
 ), topics AS (
  SELECT r.tag,r.title,r.next_action,count(*) AS mentions,count(distinct h.customer_key) AS conversations,
@@ -37,15 +40,17 @@ WITH owned AS MATERIALIZED (
  SELECT event_key,customer_key,text,quality_kind,occurred_at,selected_signals AS signals FROM signals ORDER BY occurred_at DESC LIMIT 24
 )
 SELECT jsonb_build_object(
- 'summary',(SELECT jsonb_build_object('raw',(SELECT count(*) FROM ci_history_index WHERE user_id=p_owner)+(SELECT count(*) FROM messages WHERE user_id=p_owner),'incoming',count(*) FILTER(WHERE kind='customer'),'excluded',count(*) FILTER(WHERE kind='customer' AND quality_kind IN ('reaction','courtesy','followup','trigger','keyword_only','no_text')),'unclear',count(*) FILTER(WHERE kind='customer' AND quality_kind='unclear'),'signals',(SELECT count(*) FROM signals),'conversations',(SELECT count(distinct customer_key) FROM signals),'media_unread',(SELECT count(*) FROM ci_evidence_messages WHERE user_id=p_owner AND jsonb_array_length(attachments)>0),'unmapped',(SELECT count(*) FROM signals s LEFT JOIN (SELECT DISTINCT event_key FROM hits) h USING(event_key) WHERE h.event_key IS NULL)) FROM owned),
+ 'summary',(SELECT jsonb_build_object('raw',(SELECT count(*) FROM ci_history_index WHERE user_id=$1)+(SELECT count(*) FROM messages WHERE user_id=$1),'incoming',count(*) FILTER(WHERE kind='customer'),'excluded',count(*) FILTER(WHERE kind='customer' AND quality_kind IN ('reaction','courtesy','followup','trigger','keyword_only','no_text')),'unclear',count(*) FILTER(WHERE kind='customer' AND quality_kind='unclear'),'signals',(SELECT count(*) FROM signals),'conversations',(SELECT count(distinct customer_key) FROM signals),'media_unread',(SELECT count(*) FROM ci_evidence_messages WHERE user_id=$1 AND jsonb_array_length(attachments)>0),'unmapped',(SELECT count(*) FROM signals s LEFT JOIN (SELECT DISTINCT event_key FROM hits) h USING(event_key) WHERE h.event_key IS NULL)) FROM owned),
  'categories',coalesce((SELECT jsonb_agg(to_jsonb(t)) FROM types t),'[]'),
  'topics',coalesce((SELECT jsonb_agg(to_jsonb(t) ORDER BY orders DESC,intent_conversations DESC,conversations DESC) FROM topics t),'[]'),
  'examples',coalesce((SELECT jsonb_agg(to_jsonb(e)) FROM examples e),'[]'),
- 'products',coalesce((SELECT jsonb_agg(to_jsonb(p)) FROM ci_products p WHERE p.user_id=p_owner),'[]'),
- 'ai',(SELECT jsonb_build_object('ready',count(*) FILTER(WHERE status='ready' AND insight IS NOT NULL AND schema_version=2),'pending',count(*) FILTER(WHERE status='pending'),'errors',count(*) FILTER(WHERE status='error')) FROM ci_jobs WHERE user_id=p_owner),
- 'insights',coalesce((SELECT jsonb_agg(to_jsonb(i)) FROM(SELECT customer_key,period,insight FROM ci_jobs WHERE user_id=p_owner AND status='ready' AND schema_version=2 AND insight IS NOT NULL ORDER BY updated_at DESC LIMIT 10)i),'[]'),
- 'purchase_tracking_connected',EXISTS(SELECT 1 FROM ci_purchases WHERE user_id=p_owner AND source='verified_webhook')
+ 'products',coalesce((SELECT jsonb_agg(to_jsonb(p)) FROM ci_products p WHERE p.user_id=$1),'[]'),
+ 'ai',(SELECT jsonb_build_object('ready',count(*) FILTER(WHERE status='ready' AND insight IS NOT NULL AND schema_version=2),'pending',count(*) FILTER(WHERE status='pending'),'errors',count(*) FILTER(WHERE status='error')) FROM ci_jobs WHERE user_id=$1),
+ 'insights',coalesce((SELECT jsonb_agg(to_jsonb(i)) FROM(SELECT customer_key,period,insight FROM ci_jobs WHERE user_id=$1 AND status='ready' AND schema_version=2 AND insight IS NOT NULL ORDER BY updated_at DESC LIMIT 10)i),'[]'),
+ 'purchase_tracking_connected',EXISTS(SELECT 1 FROM ci_purchases WHERE user_id=$1 AND source='verified_webhook')
 );
-$$;
+$ci_query$ INTO payload USING p_owner,p_product,p_days,p_scope;
+ RETURN payload;
+END$$;
 REVOKE ALL ON FUNCTION public.ci_dashboard_v2(bigint,text,integer,text) FROM PUBLIC,anon,authenticated;
 GRANT EXECUTE ON FUNCTION public.ci_dashboard_v2(bigint,text,integer,text) TO service_role;
