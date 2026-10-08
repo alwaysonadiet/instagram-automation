@@ -93,9 +93,9 @@ WITH owned AS MATERIALIZED (
  AND ($3 IS NULL OR EXISTS(SELECT 1 FROM ci_products p,unnest(p.keywords) w WHERE p.user_id=$1 AND p.product_key=$3 AND text ILIKE '%'||w||'%'))
 ), matched AS MATERIALIZED (
  SELECT *, (SELECT jsonb_agg(s) FROM jsonb_array_elements(signals) s WHERE CASE $4
- WHEN 'testimonial' THEN s->>'kind'='testimonial' WHEN 'progress' THEN s->>'kind' IN ('progress','feedback')
+ WHEN 'all' THEN true WHEN 'testimonial' THEN s->>'kind'='testimonial' WHEN 'progress' THEN s->>'kind' IN ('progress','feedback')
  WHEN 'support' THEN s->>'kind'='support' WHEN 'objection' THEN s->>'kind'='objection'
- ELSE s->>'kind' IN ('problem','desire','objection','question') END) AS selected_signals
+ ELSE s->>'kind' IN ('problem','desire','question') AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements(signals) barrier WHERE barrier->>'kind'='objection' AND barrier->>'quote'=s->>'quote') END) AS selected_signals
  FROM owned WHERE ($5='' OR strpos(lower(text),lower($5))>0)
  AND ($7 IS NULL OR text ~ CASE $7 WHEN 'item' THEN '(아이템|카테고리|뭘.?만들|뭘.?팔)' WHEN 'execution' THEN '(실행|시작|미루|완벽|결정)' WHEN 'beginner' THEN '(초보|실력|따라갈|자신)' WHEN 'time' THEN '(시간|육아|직장|과제)' WHEN 'price' THEN '(가격|금액|부담|할부|수입|수강료)' WHEN 'etsy' THEN '(입점|정지|엣시|etsy)' WHEN 'sales' THEN '(판매|매출|수익|주문)' WHEN 'research' THEN '(시장조사|디자인|캔바)' WHEN 'access' THEN '(다운로드|로그인|파일|접속|환불|취소)' WHEN 'schedule' THEN '(언제|기간|오픈|재입고|신청|구매)' WHEN 'automation' THEN '(인디자인|하이퍼링크|자동화|툴)' WHEN 'choice' THEN '(차이|강의|상품|패키지|노트|키트)' ELSE '(?!)' END)
 ), eligible AS MATERIALIZED (SELECT * FROM matched WHERE selected_signals IS NOT NULL OR $4='all'), page AS (
