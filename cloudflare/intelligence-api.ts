@@ -51,9 +51,16 @@ export async function handleIntelligence(request: Request, env: IntelligenceEnv)
       if (action === "learning") return json({ learning: await dbRequest(env,"rpc/ci_conversion_learning",{p_owner:owner}) })
       if (action === "content") return json({ ideas: await dbRequest(env, `ci_content?user_id=eq.${owner}&order=created_at.desc&limit=50`), links: await dbRequest(env, `ci_links?user_id=eq.${owner}&select=slug,content_id,destination,customer_key&order=created_at.desc&limit=50`) })
       const product = url.searchParams.get("product")
-      const days = Number(url.searchParams.get("days") ?? 30)
+      const days = Number(url.searchParams.get("days") ?? 0)
       const scope = url.searchParams.get("scope") || "marketing"
-      if (![0,7,30,90,365].includes(days) || !["marketing","support","testimonial"].includes(scope)) return json({error:"Invalid filter"},400)
+      if (![0,7,30,90,365].includes(days) || !["marketing","support","testimonial","progress","objection","all"].includes(scope)) return json({error:"Invalid filter"},400)
+      if (action === 'library') {
+        const search=url.searchParams.get('search')||''
+        const offset=Number(url.searchParams.get('offset')||0)
+        const topic=url.searchParams.get('topic')||null
+        if (search.length>200 || !Number.isInteger(offset) || offset<0 || offset>100000 || (topic && !['item','execution','beginner','time','price','etsy','choice','sales','research','access','schedule','automation'].includes(topic))) return json({error:'Invalid library filter'},400)
+        return json(await dbRequest(env,'rpc/ci_evidence_library',{p_owner:owner,p_days:days,p_product:product||null,p_scope:scope,p_search:search,p_offset:offset,p_topic:topic}))
+      }
       return json(await dbRequest(env, "rpc/ci_dashboard_v2", { p_owner: owner, p_product: product || null, p_days: days, p_scope: scope }))
     }
     if (request.method !== "POST") return json({ error: "Method not allowed" }, 405)
@@ -82,7 +89,7 @@ export async function handleIntelligence(request: Request, env: IntelligenceEnv)
     if (action === "content") {
       const formats = ["Reel", "Carousel", "Story", "FAQ", "Sales Page", "Content Idea"]
       if (!formats.includes(body.format) || typeof body.event_key !== "string" || body.event_key.length > 1200) return json({ error: "Invalid content request" }, 400)
-      const evidence = await dbRequest(env, `ci_messages?user_id=eq.${owner}&event_key=eq.${encodeURIComponent(body.event_key)}&kind=eq.customer&quality_kind=in.(problem,desire,objection,question,support,testimonial)&select=event_key,text&limit=1`)
+      const evidence = await dbRequest(env, `ci_messages?user_id=eq.${owner}&event_key=eq.${encodeURIComponent(body.event_key)}&kind=eq.customer&quality_kind=in.(problem,desire,objection,question,support,testimonial,purchase_report)&select=event_key,text&limit=1`)
       if (!evidence.length) return json({ error: "고객 원문을 찾지 못했어요." }, 404)
       const quote = evidence[0].text
       const outline = `고객 원문 (내부 참고):\n${quote}\n\n도입: 이 질문이 반복되는 상황을 설명하세요.\n핵심: 바로 적용할 수 있는 해결 방법 1~3개를 적으세요.\n근거: 실제 사례나 확인 가능한 결과를 추가하세요.\n마무리: 다음 행동 한 가지를 안내하세요.\n\n게시 전 개인정보와 표현을 검토하세요.`
