@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import { Search, Loader2, MoreVertical, Mail, MailOpen, Pin, PinOff, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem } from "@/components/ui/context-menu"
@@ -18,6 +18,7 @@ interface ConversationListProps {
 }
 
 export function ConversationList({ onActionCompleted, userId, selectedId, onSelect, revision = 0 }: ConversationListProps) {
+    const profiles = useRef(new Map<string, Partial<Conversation>>())
     const [conversations, setConversations] = useState<Conversation[]>([])
     const [loading, setLoading] = useState(true)
     const [search, setSearch] = useState("")
@@ -64,7 +65,19 @@ export function ConversationList({ onActionCompleted, userId, selectedId, onSele
                 const res = await fetch(`/api/inbox/conversations?userId=${userId}`, { signal: controller.signal, cache: "no-store" })
                 const data = await res.json()
                 if (!controller.signal.aborted && Array.isArray(data)) {
-                    setConversations(data)
+                    setConversations(data.map(conv => ({ ...conv, ...profiles.current.get(String(conv.recipient_id)) })))
+                    setLoading(false)
+                    // Profiles never block the first list paint. Retain them across push refreshes.
+                    const missing = data.filter(conv => !profiles.current.has(String(conv.recipient_id)))
+                    for (let offset = 0; offset < missing.length && !controller.signal.aborted; offset += 8) {
+                        const ids = missing.slice(offset, offset + 8).map(conv => conv.recipient_id).join(",")
+                        const response = await fetch(`/api/inbox/conversations?userId=${encodeURIComponent(userId)}&profiles=${encodeURIComponent(ids)}`, { signal: controller.signal, cache: "no-store" })
+                        if (!response.ok) continue
+                        const details = await response.json()
+                        if (!Array.isArray(details) || controller.signal.aborted) continue
+                        details.forEach(profile => profiles.current.set(String(profile.recipient_id), profile))
+                        setConversations(previous => previous.map(conv => ({ ...conv, ...profiles.current.get(String(conv.recipient_id)) })))
+                    }
                 }
             } catch (error) {
                 if (!controller.signal.aborted) console.error("Failed to load conversations", error)
