@@ -60,9 +60,9 @@ CREATE OR REPLACE VIEW public.ci_evidence_messages WITH(security_invoker=true) A
 REVOKE ALL ON public.ci_evidence_messages FROM PUBLIC,anon,authenticated;
 GRANT SELECT ON public.ci_evidence_messages TO service_role;
 CREATE OR REPLACE FUNCTION public.ci_evidence_library(p_owner bigint,p_days integer DEFAULT 0,p_product text DEFAULT NULL,p_scope text DEFAULT 'marketing',p_search text DEFAULT '',p_offset integer DEFAULT 0,p_topic text DEFAULT NULL) RETURNS jsonb
-LANGUAGE sql STABLE SECURITY INVOKER SET search_path=public SET jit=off AS $$
+LANGUAGE sql STABLE SECURITY INVOKER SET search_path=public SET jit=off SET work_mem='16MB' AS $$
 WITH owned AS MATERIALIZED (
- SELECT * FROM ci_evidence_messages WHERE user_id=p_owner
+ SELECT event_key,customer_key,text,quality_kind,occurred_at,signals,jsonb_array_length(attachments) AS attachment_count FROM ci_evidence_messages WHERE user_id=p_owner
  AND (p_days=0 OR occurred_at>=now()-make_interval(days=>least(greatest(p_days,1),3650)))
  AND (p_product IS NULL OR EXISTS(SELECT 1 FROM ci_products p,unnest(p.keywords) w WHERE p.user_id=p_owner AND p.product_key=p_product AND text ILIKE '%'||w||'%'))
 ), matched AS MATERIALIZED (
@@ -73,10 +73,10 @@ WITH owned AS MATERIALIZED (
  FROM owned WHERE (p_search='' OR strpos(lower(text),lower(p_search))>0)
  AND (p_topic IS NULL OR text ~ CASE p_topic WHEN 'item' THEN '(아이템|카테고리|뭘.?만들|뭘.?팔)' WHEN 'execution' THEN '(실행|시작|미루|완벽|결정)' WHEN 'beginner' THEN '(초보|실력|따라갈|자신)' WHEN 'time' THEN '(시간|육아|직장|과제)' WHEN 'price' THEN '(가격|금액|부담|할부|수입|수강료)' WHEN 'etsy' THEN '(입점|정지|엣시|etsy)' WHEN 'sales' THEN '(판매|매출|수익|주문)' WHEN 'research' THEN '(시장조사|디자인|캔바)' WHEN 'access' THEN '(다운로드|로그인|파일|접속|환불|취소)' WHEN 'schedule' THEN '(언제|기간|오픈|재입고|신청|구매)' WHEN 'automation' THEN '(인디자인|하이퍼링크|자동화|툴)' WHEN 'choice' THEN '(차이|강의|상품|패키지|노트|키트)' ELSE '(?!)' END)
 ), eligible AS MATERIALIZED (SELECT * FROM matched WHERE selected_signals IS NOT NULL OR p_scope='all'), page AS (
- SELECT event_key,customer_key,text,quality_kind,occurred_at,coalesce(selected_signals,signals) AS signals,jsonb_array_length(attachments) AS attachment_count
+ SELECT event_key,customer_key,text,quality_kind,occurred_at,coalesce(selected_signals,signals) AS signals,attachment_count
  FROM eligible ORDER BY occurred_at DESC,event_key DESC LIMIT 25 OFFSET least(greatest(p_offset,0),100000)
 )
-SELECT jsonb_build_object('total',(SELECT count(*) FROM eligible),'items',coalesce((SELECT jsonb_agg(to_jsonb(p)) FROM page p),'[]'),'media_unread',(SELECT count(*) FROM owned WHERE jsonb_array_length(attachments)>0),'scope_counts',(SELECT coalesce(jsonb_object_agg(k,n),'{}') FROM (SELECT s->>'kind' AS k,count(distinct event_key) n FROM owned CROSS JOIN LATERAL jsonb_array_elements(signals) s GROUP BY s->>'kind') counts));
+SELECT jsonb_build_object('total',(SELECT count(*) FROM eligible),'items',coalesce((SELECT jsonb_agg(to_jsonb(p)) FROM page p),'[]'),'media_unread',(SELECT count(*) FROM owned WHERE attachment_count>0),'scope_counts',(SELECT coalesce(jsonb_object_agg(k,n),'{}') FROM (SELECT s->>'kind' AS k,count(distinct event_key) n FROM owned CROSS JOIN LATERAL jsonb_array_elements(signals) s GROUP BY s->>'kind') counts));
 $$;
 REVOKE ALL ON FUNCTION public.ci_evidence_library(bigint,integer,text,text,text,integer,text) FROM PUBLIC,anon,authenticated;
 GRANT EXECUTE ON FUNCTION public.ci_evidence_library(bigint,integer,text,text,text,integer,text) TO service_role;
