@@ -19,6 +19,7 @@ export async function handleIntelligence(request: Request, env: IntelligenceEnv)
     if (!owner) return json({ error: "다시 로그인해 주세요." }, 401)
     const action = url.searchParams.get("action") || "dashboard"
     if (request.method === "GET") {
+      if (action === "workspace") return json(await dbRequest(env,"rpc/ci_workspace",{p_owner:owner}))
       if (url.pathname === "/api/history/config" || action === "settings") {
         const settings = await dbRequest(env, `ci_settings?user_id=eq.${owner}&select=owner_names,analysis_enabled,daily_limit`)
         return json({ settings: settings[0] || { owner_names: [], analysis_enabled: true, daily_limit: 5 } })
@@ -33,15 +34,27 @@ export async function handleIntelligence(request: Request, env: IntelligenceEnv)
         const key = url.searchParams.get("key") || ""
         if (!key || key.length > 1200) return json({ error: "Invalid customer" }, 400)
         const offset = Math.min(100000, Math.max(0, Number(url.searchParams.get("offset")) || 0))
-        const events = await dbRequest(env, `ci_messages?user_id=eq.${owner}&customer_key=eq.${encodeURIComponent(key)}&select=event_key,occurred_at,direction,text,kind,source,attachments&order=occurred_at.asc,event_key.asc&offset=${offset}&limit=101`)
-        const insights = await dbRequest(env, `ci_jobs?user_id=eq.${owner}&customer_key=eq.${encodeURIComponent(key)}&status=eq.ready&select=period,insight&order=period.asc`)
+        const select = "event_key,occurred_at,direction,text,kind,quality_kind,source,attachments"
+        const anchor = url.searchParams.get("anchor")
+        let events
+        if (anchor) {
+          const target = await dbRequest(env,`ci_messages?user_id=eq.${owner}&customer_key=eq.${encodeURIComponent(key)}&event_key=eq.${encodeURIComponent(anchor)}&select=occurred_at&limit=1`)
+          if (!target.length) return json({error:"원문을 찾지 못했어요."},404)
+          const prefix=`ci_messages?user_id=eq.${owner}&customer_key=eq.${encodeURIComponent(key)}&select=${select}`
+          const [before,after]=await Promise.all([dbRequest(env,`${prefix}&occurred_at=lt.${encodeURIComponent(target[0].occurred_at)}&order=occurred_at.desc,event_key.desc&limit=12`),dbRequest(env,`${prefix}&occurred_at=gte.${encodeURIComponent(target[0].occurred_at)}&order=occurred_at.asc,event_key.asc&limit=13`)])
+          events=[...before.reverse(),...after]
+        } else events = await dbRequest(env, `ci_messages?user_id=eq.${owner}&customer_key=eq.${encodeURIComponent(key)}&select=${select}&order=occurred_at.asc,event_key.asc&offset=${offset}&limit=101`)
+        const insights = await dbRequest(env, `ci_jobs?user_id=eq.${owner}&customer_key=eq.${encodeURIComponent(key)}&status=eq.ready&schema_version=eq.2&select=period,insight&order=period.asc`)
         const purchases = await dbRequest(env, `ci_purchases?user_id=eq.${owner}&customer_key=eq.${encodeURIComponent(key)}&select=order_key,currency,amount,paid_at,source&order=paid_at.asc`)
-        return json({ messages: events.slice(0, 100), more: events.length > 100, insights, purchases })
+        return json({ messages: events.slice(0, 100), more: !anchor && events.length > 100, insights, purchases })
       }
       if (action === "learning") return json({ learning: await dbRequest(env,"rpc/ci_conversion_learning",{p_owner:owner}) })
       if (action === "content") return json({ ideas: await dbRequest(env, `ci_content?user_id=eq.${owner}&order=created_at.desc&limit=50`), links: await dbRequest(env, `ci_links?user_id=eq.${owner}&select=slug,content_id,destination,customer_key&order=created_at.desc&limit=50`) })
       const product = url.searchParams.get("product")
-      return json(await dbRequest(env, "rpc/ci_dashboard", { p_owner: owner, p_product: product || null }))
+      const days = Number(url.searchParams.get("days") ?? 30)
+      const scope = url.searchParams.get("scope") || "marketing"
+      if (![0,7,30,90,365].includes(days) || !["marketing","support","testimonial"].includes(scope)) return json({error:"Invalid filter"},400)
+      return json(await dbRequest(env, "rpc/ci_dashboard_v2", { p_owner: owner, p_product: product || null, p_days: days, p_scope: scope }))
     }
     if (request.method !== "POST") return json({ error: "Method not allowed" }, 405)
     const raw = await request.text()
@@ -69,7 +82,7 @@ export async function handleIntelligence(request: Request, env: IntelligenceEnv)
     if (action === "content") {
       const formats = ["Reel", "Carousel", "Story", "FAQ", "Sales Page", "Content Idea"]
       if (!formats.includes(body.format) || typeof body.event_key !== "string" || body.event_key.length > 1200) return json({ error: "Invalid content request" }, 400)
-      const evidence = await dbRequest(env, `ci_messages?user_id=eq.${owner}&event_key=eq.${encodeURIComponent(body.event_key)}&kind=eq.customer&select=event_key,text&limit=1`)
+      const evidence = await dbRequest(env, `ci_messages?user_id=eq.${owner}&event_key=eq.${encodeURIComponent(body.event_key)}&kind=eq.customer&quality_kind=in.(problem,desire,objection,question,support,testimonial)&select=event_key,text&limit=1`)
       if (!evidence.length) return json({ error: "고객 원문을 찾지 못했어요." }, 404)
       const quote = evidence[0].text
       const outline = `고객 원문 (내부 참고):\n${quote}\n\n도입: 이 질문이 반복되는 상황을 설명하세요.\n핵심: 바로 적용할 수 있는 해결 방법 1~3개를 적으세요.\n근거: 실제 사례나 확인 가능한 결과를 추가하세요.\n마무리: 다음 행동 한 가지를 안내하세요.\n\n게시 전 개인정보와 표현을 검토하세요.`
@@ -113,7 +126,7 @@ export async function handleIntelligence(request: Request, env: IntelligenceEnv)
     }
     if (action === "analyze") return json(await runOneAnalysis(env))
     return json({ error: "Unknown action" }, 400)
-  } catch { return json({ error: "연결을 확인해 다시 시도해 주세요." }, 503) }
+  } catch { return json({ error: "고객 데이터 조회가 지연됐어요. 잠시 후 새로고침해 주세요." }, 503) }
 }
 export async function handleTrackedClick(request: Request, env: IntelligenceEnv) {
   if (!["GET", "HEAD"].includes(request.method)) return json({ error: "Method not allowed" }, 405)
