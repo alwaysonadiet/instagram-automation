@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 import { InstagramDMLink } from "./InstagramDMLink"
+import { CopyableMessage } from "./CopyableMessage"
 import { RecipientAvatar } from "./RecipientAvatar"
 import type { Message } from "@/types/db"
 
@@ -238,7 +239,7 @@ export function ChatWindow({ accountUsername, conversationId, recipientId, recip
                         const isMe = !msg.is_from_instagram
                         return (
                             <div key={msg.id} className={cn("flex w-full", isMe ? "justify-end" : "justify-start")}>
-                                <div className={cn(
+                                <CopyableMessage text={msg.content || ""} className={cn(
                                     "max-w-[85%] md:max-w-[70%] rounded-2xl px-4 py-3 text-sm break-words",
                                     isMe
                                         ? "bg-primary text-primary-foreground rounded-br-none"
@@ -278,7 +279,7 @@ export function ChatWindow({ accountUsername, conversationId, recipientId, recip
                                     )}>
                                         {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                     </div>
-                                </div>
+                                </CopyableMessage>
                             </div>
                         )
                     })
