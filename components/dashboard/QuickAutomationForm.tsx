@@ -1,6 +1,7 @@
 "use client"
 
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
+import { DEFAULT_PUBLIC_REPLIES } from "@/lib/public-replies"
 import { Loader2 } from "lucide-react"
 import type { Automation, MediaItem } from "@/lib/types"
 
@@ -39,7 +40,16 @@ export function QuickAutomationForm({ userId, initialSource, onSuccess }: {
   }
   const [allComments, setAllComments] = useState(false)
   const [replyMode, setReplyMode] = useState<"dm_only" | "public_only" | "both">("both")
-  const [publicReplies, setPublicReplies] = useState("")
+  const [publicReplies, setPublicReplies] = useState(DEFAULT_PUBLIC_REPLIES.join("\n"))
+  useEffect(() => {
+    let active = true
+    fetch("/api/public-reply-defaults").then(async r => {
+      if (!r.ok) return
+      const data = await r.json()
+      if (active && Array.isArray(data.replies)) setPublicReplies(previous => previous === DEFAULT_PUBLIC_REPLIES.join("\n") ? data.replies.join("\n") : previous)
+    }).catch(() => {})
+    return () => { active = false }
+  }, [])
   const [buttons, setButtons] = useState<{ title: string; url: string }[]>([])
   const [checkFollow, setCheckFollow] = useState(false)
   const [followGate, setFollowGate] = useState({ message: "자료를 받으려면 먼저 팔로우해주세요 💌\n팔로우 후 아래 버튼을 눌러주세요.", not_following_message: "아직 팔로우가 확인되지 않았어요. 팔로우 후 위 버튼을 다시 눌러주세요.", confirm_button: "팔로우 했어요 ✅" })
