@@ -13,6 +13,12 @@ BEGIN
  ('강의 듣고 첫 상품을 완성했어요. 감사합니다!',ARRAY['progress'],ARRAY['support']),
  ('판매가 안되고 있어요.',ARRAY['problem'],ARRAY['testimonial']),
  ('학원에 600만원 투자했는데 수익화에 실패했어요.',ARRAY['problem'],ARRAY['testimonial']),
+ ('3세일을 했어요. 앞으로 다른 상품도 만들고 싶어요.',ARRAY['testimonial'],ARRAY['support']),
+ ('첫 세일을 맛 본 뒤 아직 판매는 저조해서 고민이에요.',ARRAY['testimonial'],ARRAY['support']),
+ ('첫 상품으로 1000세일, 베스트셀러에 스타샵까지 달아서 기뻐요.',ARRAY['testimonial'],ARRAY['support']),
+ ('그때 시작했으면 저도 수익이 나고 있었겠지요?',ARRAY[]::text[],ARRAY['testimonial']),
+ ('오늘 팔렸나 확인하려고요.',ARRAY[]::text[],ARRAY['testimonial']),
+ ('현재 클립아트를 판매하고 있는데 상품을 더 만들고 싶어요.',ARRAY[]::text[],ARRAY['testimonial']),
  ('첫판매 하고 소식 들려드릴게요.',ARRAY[]::text[],ARRAY['testimonial']),
  ('저는 샵을 연 뒤 8세일을 해서 기쁘지만 아직 초보라 계속 할 수 있을지 걱정이에요.',ARRAY['testimonial','objection'],ARRAY['support'])
  ) x(txt,expected,absent) LOOP
