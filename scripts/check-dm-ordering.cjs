@@ -28,6 +28,8 @@ async function test(matched, profileFails = false) {
     return query
   } }
   const mocks = {
+    '@/lib/public-replies':{publicReplyDefaults:()=>['Sent']},
+    '@/lib/message-provenance':{trackAutomatedSend:async(_owner,pending)=>pending},
     'next/server': { NextResponse: { json: data => data } },
     '@/lib/supabase-server': { getSupabaseServerClient: async () => db },
     '@/lib/supabase-migrate': { ensureSchema: async () => {} },
