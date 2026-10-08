@@ -23,6 +23,7 @@ export async function handleIntelligence(request: Request, env: IntelligenceEnv)
         const settings = await dbRequest(env, `ci_settings?user_id=eq.${owner}&select=owner_names,analysis_enabled,daily_limit`)
         return json({ settings: settings[0] || { owner_names: [], analysis_enabled: true, daily_limit: 5 } })
       }
+      if (action === "conversations") return json({ conversations: await dbRequest(env,`conversations?user_id=eq.${owner}&select=id,recipient_username,recipient_id&order=last_message_at.desc&limit=200`) })
       if (action === "backfill") return json({ backfill: (await dbRequest(env,`ci_backfill?user_id=eq.${owner}&select=status,conversations_done,messages_inserted,last_error,updated_at`))[0] || null })
       if (action === "integration") {
         const settings = await dbRequest(env, `ci_settings?user_id=eq.${owner}&select=purchase_secret`)
