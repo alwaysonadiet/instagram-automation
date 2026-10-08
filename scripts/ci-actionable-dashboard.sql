@@ -8,7 +8,7 @@ WITH owned AS MATERIALIZED (
  AND ($3=0 OR occurred_at>=now()-make_interval(days=>least(greatest($3,1),3650)))
  AND ($2 IS NULL OR EXISTS(SELECT 1 FROM ci_products p,unnest(p.keywords) w WHERE p.user_id=$1 AND p.product_key=$2 AND text ILIKE '%'||w||'%'))
 ), signals AS MATERIALIZED (
- SELECT *, (SELECT jsonb_agg(s) FROM jsonb_array_elements(signals) s WHERE CASE $4 WHEN 'support' THEN s->>'kind'='support' WHEN 'testimonial' THEN s->>'kind'='testimonial' WHEN 'progress' THEN s->>'kind' IN ('progress','feedback') WHEN 'objection' THEN s->>'kind'='objection' ELSE s->>'kind' IN ('problem','desire','objection','question') END) AS selected_signals FROM owned WHERE EXISTS(SELECT 1 FROM jsonb_array_elements(signals) s WHERE CASE $4 WHEN 'support' THEN s->>'kind'='support' WHEN 'testimonial' THEN s->>'kind'='testimonial' WHEN 'progress' THEN s->>'kind' IN ('progress','feedback') WHEN 'objection' THEN s->>'kind'='objection' ELSE s->>'kind' IN ('problem','desire','objection','question') END)
+ SELECT *, (SELECT jsonb_agg(s) FROM jsonb_array_elements(signals) s WHERE CASE $4 WHEN 'support' THEN s->>'kind'='support' WHEN 'testimonial' THEN s->>'kind'='testimonial' WHEN 'progress' THEN s->>'kind' IN ('progress','feedback') WHEN 'objection' THEN s->>'kind'='objection' ELSE s->>'kind' IN ('problem','desire','question') AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements(signals) barrier WHERE barrier->>'kind'='objection' AND barrier->>'quote'=s->>'quote') END) AS selected_signals FROM owned WHERE EXISTS(SELECT 1 FROM jsonb_array_elements(signals) s WHERE CASE $4 WHEN 'support' THEN s->>'kind'='support' WHEN 'testimonial' THEN s->>'kind'='testimonial' WHEN 'progress' THEN s->>'kind' IN ('progress','feedback') WHEN 'objection' THEN s->>'kind'='objection' ELSE s->>'kind' IN ('problem','desire','question') AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements(signals) barrier WHERE barrier->>'kind'='objection' AND barrier->>'quote'=s->>'quote') END)
 ), rules(tag,title,pattern,next_action) AS (VALUES
  ('item','어떤 아이템으로 시작할지 모르겠어요','(아이템|카테고리|뭘.?만들|무엇을.?만들|뭘.?팔|주제.?선정)','선택 기준과 첫 상품 예시를 콘텐츠로 설명하세요.'),
  ('execution','알지만 시작·실행이 안 돼요','(미루|실행.*(못|안|어렵|정체)|시작.*(못|안|어렵)|손이.?안|완벽주의|결정을.?못)','작게 시작하는 방법과 오늘 할 행동을 보여주세요.'),
@@ -23,7 +23,7 @@ WITH owned AS MATERIALIZED (
  ('schedule','언제·어디서 구매하고 시작하나요?','(언제.*(오픈|시작|구매|수강)|구매.*(링크|방법|어디|가능)|신청.*(방법|언제|가능)|재입고|수강.*(기간|평생|시작)|오픈.*(날짜|일정|예정))','구매 링크·오픈 일정·수강 기간을 FAQ와 안내 메시지에 명확히 적으세요.'),
  ('automation','툴·자동화 사용이 궁금해요','(인디자인|하이퍼링크|자동화|툴.*(사용|방법))','관련 사용 안내를 보완하세요. 판매 종료 상품은 재판매로 연결하지 마세요.')
 ), hits AS MATERIALIZED (
- SELECT s.event_key,s.customer_key,s.occurred_at,s.text,s.quality_kind,s.selected_signals,r.tag FROM signals s JOIN rules r ON EXISTS(SELECT 1 FROM jsonb_array_elements(s.selected_signals) e WHERE e->>'quote' ~ r.pattern)
+ SELECT s.event_key,s.customer_key,s.occurred_at,s.text,s.quality_kind,(SELECT jsonb_agg(e) FROM jsonb_array_elements(s.selected_signals) e WHERE e->>'quote' ~ r.pattern) AS selected_signals,r.tag FROM signals s JOIN rules r ON EXISTS(SELECT 1 FROM jsonb_array_elements(s.selected_signals) e WHERE e->>'quote' ~ r.pattern)
 ), theme_orders AS (
  SELECT r.tag,p.order_key,p.currency,p.amount-p.refunded_amount AS amount FROM rules r JOIN ci_purchases p ON p.user_id=$1 AND p.status='paid'
  WHERE EXISTS(SELECT 1 FROM hits h WHERE h.tag=r.tag AND h.customer_key=p.customer_key AND h.occurred_at<=p.paid_at AND h.occurred_at>=p.paid_at-interval '30 days')
