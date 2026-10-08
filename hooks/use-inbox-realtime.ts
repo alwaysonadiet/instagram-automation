@@ -96,7 +96,7 @@ export function useInboxRealtime(userId: string | null, conversationId: string |
         seen.current.add(row.id)
         if (seen.current.size > 500) seen.current.delete(seen.current.values().next().value!)
         refresh(row.conversation_id === selected.current)
-        if (row.is_from_instagram === true) playSound()
+        if (row.is_from_instagram === true && row.ingest_source !== "backfill") playSound()
       })
       .subscribe(status => {
         if (stopped) return
