@@ -1,6 +1,7 @@
 /* @ts-nocheck */
 
 import crypto from "crypto"
+import { publicReplyDefaults } from "@/lib/public-replies"
 import { type NextRequest, NextResponse } from "next/server"
 import { getSupabaseServerClient } from "@/lib/supabase-server"
 import {
@@ -45,7 +46,7 @@ function isValidSignature(rawBody: string, signatureHeader: string | null): bool
   })
 }
 
-const DEFAULT_PUBLIC_REPLIES = ["Check your DMs! 📥", "Sent! 🔥", "Check inbox! ✨"]
+
 
 // Max times we'll send the gate card for an unverifiable follow status on a single unlock event.
 // After this, we send a single "couldn't verify your follow" message and stop spamming the user.
@@ -350,7 +351,7 @@ export async function POST(request: NextRequest) {
                       const pool: string[] =
                         Array.isArray(content.public_replies) && content.public_replies.filter(Boolean).length > 0
                           ? content.public_replies.filter(Boolean)
-                          : DEFAULT_PUBLIC_REPLIES
+                          : publicReplyDefaults(user.public_reply_defaults)
                       return pickRandom(pool)
                     }
 
